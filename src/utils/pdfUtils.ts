@@ -2,9 +2,10 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import JSZip from 'jszip';
 import { jsPDF } from 'jspdf';
 import * as pdfjsLib from 'pdfjs-dist';
-import JSZip from 'jszip';
 import { DPI, CARD_SHEET_PAPER_SIZES, PDF_TOOL_PAPER_SIZES_POINTS, CM_TO_POINTS, MM_TO_POINTS } from '../constants';
 import { CardSheetSettings, PdfManipulationSettings, BookWrapperSettings } from '../types';
+
+const { getDocument } = pdfjsLib;
 
 export async function countPdfPages(
   files: File[],
