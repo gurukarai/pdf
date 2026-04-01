@@ -247,30 +247,6 @@ const BookWrapper: React.FC = () => {
             </button>
             <button
               onClick={() => {
-                setIsCanvasMode(true);
-                setIsCompositorMode(false);
-                setSettings({
-                  bookPageSize: 'a4',
-                  outputPaperSize: 'custom',
-                  customOutputWidth: 482.6,
-                  customOutputHeight: 330.2,
-                  unit: 'mm',
-                  marginTop: 16,
-                  marginBottom: 16,
-                  marginLeft: 257,
-                  marginRight: 15,
-                  centerHorizontally: false,
-                  centerVertically: false,
-                });
-              }}
-              className={`px-4 py-2 rounded-md transition-colors duration-200 text-sm font-medium ${
-                isCanvasMode && !isCompositorMode ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Canvas Wrapper
-            </button>
-            <button
-              onClick={() => {
                 setIsCanvasMode(false);
                 setIsCompositorMode(true);
               }}
@@ -284,8 +260,7 @@ const BookWrapper: React.FC = () => {
           <div className="mt-3 space-y-1 text-xs text-blue-700">
             <p><strong>Book Wrapper:</strong> A4 (210×297mm) right-aligned on 13×19" landscape with spine — 15mm right, 16mm top/bottom, 257mm left margin</p>
             <p><strong>Blue Binding Wrapper:</strong> A4 on 560×300mm — left binding margin (280mm left, 10mm top)</p>
-            <p><strong>Canvas Wrapper:</strong> Places PDF first page as transparent on 13×19" template</p>
-            <p><strong>Canvas Compositor:</strong> Compose PDF covers onto a selectable landscape print canvas at 300 DPI</p>
+<p><strong>Canvas Compositor:</strong> Compose PDF covers onto a selectable landscape print canvas at 300 DPI</p>
           </div>
         </div>
       </div>
