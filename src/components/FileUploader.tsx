@@ -46,16 +46,16 @@ export default function FileUploader({
       </h3>
 
       <div className="space-y-3">
-        <label className="block">
-          <input
-            ref={inputRef}
-            type="file"
-            accept={accept}
-            multiple={multiple}
-            onChange={handleFileChange}
-            disabled={disabled}
-            className="hidden"
-          />
+        <input
+          ref={inputRef}
+          type="file"
+          accept={accept}
+          multiple={multiple}
+          onChange={handleFileChange}
+          disabled={disabled}
+          className="hidden"
+        />
+        <div>
           <div
             className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
               disabled
@@ -72,7 +72,7 @@ export default function FileUploader({
               {accept.split(',').join(', ')}
             </p>
           </div>
-        </label>
+        </div>
 
         {files.length > 0 && (
           <div className="space-y-2">
