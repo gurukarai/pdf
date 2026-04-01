@@ -1540,13 +1540,15 @@ export async function processCanvasWrapper(
   const canvasSize = paperSizes[settings.paperSize] || paperSizes['13x19-super-b'];
   const CANVAS_W_MM = canvasSize.width;
   const CANVAS_H_MM = canvasSize.height;
-  const PDF_HALF_W_MM = 148.5; // A4 width / 2
+  const PDF_W_MM = 297; // A4 landscape width
+  const PDF_H_MM = 210; // A4 landscape height
   const DPI = 300;
   const MM_TO_INCH = 1 / 25.4;
 
   const CANVAS_W_PX = Math.round(CANVAS_W_MM * MM_TO_INCH * DPI);
   const CANVAS_H_PX = Math.round(CANVAS_H_MM * MM_TO_INCH * DPI);
-  const PDF_HALF_W_PX = Math.round(PDF_HALF_W_MM * MM_TO_INCH * DPI);
+  const PDF_W_PX = Math.round(PDF_W_MM * MM_TO_INCH * DPI);
+  const PDF_H_PX = Math.round(PDF_H_MM * MM_TO_INCH * DPI);
 
   // Load background image
   const backgroundImg = await loadImage(backgroundFile);
@@ -1628,14 +1630,16 @@ export async function processCanvasWrapper(
     // Draw background image (stretched to canvas size)
     ctx.drawImage(background, 0, 0, CANVAS_W_PX, CANVAS_H_PX);
 
-    // Calculate PDF position (right half + offsets)
+    // Calculate PDF position (center of canvas, then to the right side + offsets)
     const offsetXpx = Math.round(offsetX * MM_TO_INCH * DPI);
     const offsetYpx = Math.round(offsetY * MM_TO_INCH * DPI);
-    const pdfX = PDF_HALF_W_PX + offsetXpx;
-    const pdfY = offsetYpx;
+    const centerX = CANVAS_W_PX / 2;
+    const pdfX = centerX + offsetXpx;
+    const centerY = (CANVAS_H_PX - PDF_H_PX) / 2;
+    const pdfY = centerY + offsetYpx;
 
-    // Draw PDF page
-    ctx.drawImage(pdfPage, pdfX, pdfY, PDF_HALF_W_PX, CANVAS_H_PX);
+    // Draw PDF page (A4 landscape size: 297mm × 210mm)
+    ctx.drawImage(pdfPage, pdfX, pdfY, PDF_W_PX, PDF_H_PX);
 
     return new Promise((resolve, reject) => {
       canvas.toBlob(blob => {
