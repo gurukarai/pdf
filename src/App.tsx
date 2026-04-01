@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { FileText, Image as ImageIcon, Download, CheckCircle, Loader2, RotateCcw, Eye, EyeOff, Lock, Zap, Calculator, Printer, CreditCard, Sparkles, FileImage } from 'lucide-react';
+import { FileText, Image as ImageIcon, Download, CheckCircle, Loader2, RotateCcw, Eye, EyeOff, Lock, Zap, Calculator, Printer, CreditCard, Sparkles, FileImage, BookOpen, Image } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import FileUploader from './components/FileUploader';
 import ProcessingStatus from './components/ProcessingStatus';
