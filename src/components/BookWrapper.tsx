@@ -4,7 +4,7 @@ import FileUpload from './FileUpload';
 import StatusMessage from './StatusMessage';
 import DownloadButton from './DownloadButton';
 import { BookWrapperSettings, StatusMessage as StatusMessageType } from '../types';
-import { processBookWrapper, processBookWrapperImages } from '../utils/pdfUtils';
+import { processBookWrapper, processBookWrapperImages, processCanvasWrapper } from '../utils/pdfUtils';
 import { BOOK_PAGE_SIZES, OUTPUT_PAPER_SIZES } from '../constants';
 
 type WrapperMode = 'book-wrapper' | 'canvas-wrapper';
@@ -31,6 +31,9 @@ const BookWrapper: React.FC = () => {
   });
 
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
+  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
+  const [previewPdfIndex, setPreviewPdfIndex] = useState(0);
   const [status, setStatus] = useState<StatusMessageType | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string>('');
@@ -41,6 +44,23 @@ const BookWrapper: React.FC = () => {
       setImageFiles(Array.from(files));
       setStatus(null);
       setDownloadUrl('');
+    }
+  }, []);
+
+  const handleBackgroundChange = useCallback((files: FileList | null) => {
+    if (files && files.length > 0) {
+      setBackgroundFile(files[0]);
+      setStatus(null);
+      setDownloadUrl('');
+    }
+  }, []);
+
+  const handlePdfFilesChange = useCallback((files: FileList | null) => {
+    if (files) {
+      setPdfFiles(Array.from(files));
+      setStatus(null);
+      setDownloadUrl('');
+      setPreviewPdfIndex(0);
     }
   }, []);
 
@@ -108,6 +128,39 @@ const BookWrapper: React.FC = () => {
       setIsProcessing(false);
     }
   }, [imageFiles, settings]);
+
+  const processCanvas = useCallback(async () => {
+    if (!backgroundFile || pdfFiles.length === 0) {
+      setStatus({ message: 'Please select background image and at least one PDF file.', type: 'error' });
+      return;
+    }
+
+    setIsProcessing(true);
+    setStatus(null);
+    setDownloadUrl('');
+
+    try {
+      const result = await processCanvasWrapper(backgroundFile, pdfFiles, canvasSettings, (message) => {
+        setStatus({ message, type: 'info' });
+      });
+
+      const url = URL.createObjectURL(result.blob);
+      setDownloadUrl(url);
+      setDownloadFilename(result.filename);
+      setStatus({
+        message: `✅ Success! Canvas wrapper generated successfully.`,
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Canvas wrapper processing error:', error);
+      setStatus({
+        message: `An error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        type: 'error'
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [backgroundFile, pdfFiles, canvasSettings]);
 
   const getFileDisplay = () => {
     if (imageFiles.length === 0) return 'No files selected';
@@ -364,28 +417,28 @@ const BookWrapper: React.FC = () => {
               id="canvasBackgroundInput"
               accept="image/jpeg,image/jpg,image/png,.jpg,.jpeg,.png"
               multiple={false}
-              onFileChange={handleFileChange}
+              onFileChange={handleBackgroundChange}
               label="Background Image (13 × 19 in)"
               description="Upload the background image for the canvas"
-              fileCount={imageFiles.length > 0 ? imageFiles[0].name : 'No file selected'}
+              fileCount={backgroundFile ? backgroundFile.name : 'No file selected'}
             />
 
             <FileUpload
               id="canvasPdfInput"
               accept="application/pdf,.pdf"
               multiple={true}
-              onFileChange={handleFileChange}
+              onFileChange={handlePdfFilesChange}
               label="PDF Cover Files"
               description="Upload one or more PDF files. First page of each PDF will be used."
-              fileCount={getFileDisplay()}
+              fileCount={pdfFiles.length === 0 ? 'No files selected' : pdfFiles.length === 1 ? pdfFiles[0].name : `${pdfFiles.length} files selected`}
             />
           </div>
 
           {/* Process Button for Canvas */}
           <button
-            onClick={processWrapper}
-            disabled={isProcessing || imageFiles.length === 0}
-            className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:from-blue-600 hover:to-indigo-700 transition-all duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+            onClick={processCanvas}
+            disabled={isProcessing || !backgroundFile || pdfFiles.length === 0}
+            className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           >
             {isProcessing ? (
               <span className="flex items-center justify-center gap-2">
