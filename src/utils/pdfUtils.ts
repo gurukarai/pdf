@@ -1514,265 +1514,133 @@ export async function processBookWrapper(
   };
 }
 
-// Canvas Wrapper: Composite PDF covers onto a background image
+// Canvas Wrapper: Same as A4 Book Wrapper but uses a background image instead of white background
 export async function processCanvasWrapper(
   backgroundFile: File,
-  pdfFiles: File[],
-  settings: {
-    paperSize: string;
-    offsetX: number;
-    offsetY: number;
-  },
+  pdfFile: File,
+  settings: BookWrapperSettings,
   onProgress: (message: string) => void
 ): Promise<{ blob: Blob; filename: string }> {
   onProgress('Loading background image...');
 
-  // Paper size configurations (width × height in mm)
-  const paperSizes: Record<string, { width: number; height: number }> = {
-    '13x19-super-b': { width: 482.6, height: 330.2 },
-    '12x18-arch-c': { width: 457.2, height: 304.8 },
-    'tabloid-11x17': { width: 431.8, height: 279.4 },
-    'a3': { width: 420, height: 297 },
-    'a4': { width: 297, height: 210 },
-    'letter': { width: 279.4, height: 215.9 }
-  };
-
-  const canvasSize = paperSizes[settings.paperSize] || paperSizes['13x19-super-b'];
-  const CANVAS_W_MM = canvasSize.width;
-  const CANVAS_H_MM = canvasSize.height;
-  const PDF_W_MM = 297; // A4 landscape width
-  const PDF_H_MM = 210; // A4 landscape height
-  const DPI = 300;
-  const MM_TO_INCH = 1 / 25.4;
-
-  const CANVAS_W_PX = Math.round(CANVAS_W_MM * MM_TO_INCH * DPI);
-  const CANVAS_H_PX = Math.round(CANVAS_H_MM * MM_TO_INCH * DPI);
-  const PDF_W_PX = Math.round(PDF_W_MM * MM_TO_INCH * DPI);
-  const PDF_H_PX = Math.round(PDF_H_MM * MM_TO_INCH * DPI);
-
   // Load background image
   const backgroundImg = await loadImage(backgroundFile);
 
-  // Helper: Remove white background from image
-  const removeWhiteBackground = (img: HTMLImageElement): Promise<HTMLImageElement> => {
-    return new Promise((resolve) => {
-      const canvas = document.createElement('canvas');
-      const w = img.naturalWidth || img.width;
-      const h = img.naturalHeight || img.height;
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(img, 0, 0);
+  onProgress('Loading PDF...');
+  const fileBuffer = await pdfFile.arrayBuffer();
+  const sourcePdf = await PDFDocument.load(fileBuffer);
+  const totalPages = sourcePdf.getPageCount();
 
-      const imageData = ctx.getImageData(0, 0, w, h);
-      const data = imageData.data;
+  onProgress(`Processing ${totalPages} pages...`);
 
-      // Make white pixels transparent
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        if (r > 240 && g > 240 && b > 240) {
-          data[i + 3] = 0; // Set alpha to 0
-        }
-      }
+  // Convert all dimensions to points (1/72 inch)
+  const convertToPoints = (value: number, unit: 'mm' | 'cm' | 'in'): number => {
+    switch (unit) {
+      case 'mm': return value * MM_TO_POINTS;
+      case 'cm': return value * CM_TO_POINTS;
+      case 'in': return value * 72;
+      default: return value;
+    }
+  };
 
-      ctx.putImageData(imageData, 0, 0);
+  // Get output paper dimensions (always landscape: larger = width, smaller = height)
+  let outputWidth: number, outputHeight: number;
+  if (settings.outputPaperSize === 'custom') {
+    const w = convertToPoints(settings.customOutputWidth || 420, settings.unit);
+    const h = convertToPoints(settings.customOutputHeight || 297, settings.unit);
+    outputWidth = Math.max(w, h);
+    outputHeight = Math.min(w, h);
+  } else {
+    const outputSize = {
+      'a3': [420 * MM_TO_POINTS, 297 * MM_TO_POINTS],
+      'a4': [297 * MM_TO_POINTS, 210 * MM_TO_POINTS],
+      'letter': [11 * 72, 8.5 * 72],
+      'legal': [14 * 72, 8.5 * 72],
+      'tabloid': [17 * 72, 11 * 72],
+      '12x18': [18 * 72, 12 * 72],
+      '13x19': [19 * 72, 13 * 72]
+    }[settings.outputPaperSize] || [420 * MM_TO_POINTS, 297 * MM_TO_POINTS];
 
-      const result = new Image();
-      result.onload = () => resolve(result);
-      result.src = canvas.toDataURL('image/png');
+    [outputWidth, outputHeight] = outputSize;
+  }
+
+  // Convert margins to points
+  const marginTop = convertToPoints(settings.marginTop, settings.unit);
+  const marginBottom = convertToPoints(settings.marginBottom, settings.unit);
+  const marginLeft = convertToPoints(settings.marginLeft, settings.unit);
+  const marginRight = convertToPoints(settings.marginRight, settings.unit);
+
+  // Calculate available space for content
+  const availableWidth = outputWidth - marginLeft - marginRight;
+  const availableHeight = outputHeight - marginTop - marginBottom;
+
+  const finalPdf = await PDFDocument.create();
+  const [embeddedPdf] = await finalPdf.embedPdf(sourcePdf);
+
+  // Convert background image to PNG bytes for embedding
+  const bgCanvas = document.createElement('canvas');
+  bgCanvas.width = backgroundImg.width;
+  bgCanvas.height = backgroundImg.height;
+  const bgCtx = bgCanvas.getContext('2d')!;
+  bgCtx.drawImage(backgroundImg, 0, 0);
+
+  const bgBlob = await new Promise<Blob>((resolve) => {
+    bgCanvas.toBlob((blob) => resolve(blob!), 'image/png');
+  });
+  const bgBytes = await bgBlob.arrayBuffer();
+  const embeddedBg = await finalPdf.embedPng(bgBytes);
+
+  for (let i = 0; i < totalPages; i++) {
+    onProgress(`Processing page ${i + 1} of ${totalPages}...`);
+
+    const embeddedPage = embeddedPdf.get(i);
+    const { width: originalWidth, height: originalHeight } = embeddedPage;
+
+    // Calculate scale to fit within available space while maintaining aspect ratio
+    const scaleX = availableWidth / originalWidth;
+    const scaleY = availableHeight / originalHeight;
+    const scale = Math.min(scaleX, scaleY, 1); // Don't scale up, only down
+
+    const scaledWidth = originalWidth * scale;
+    const scaledHeight = originalHeight * scale;
+
+    // Calculate position based on centering options
+    let x = marginLeft;
+    let y = marginBottom;
+
+    if (settings.centerHorizontally) {
+      x = marginLeft + (availableWidth - scaledWidth) / 2;
+    }
+
+    if (settings.centerVertically) {
+      y = marginBottom + (availableHeight - scaledHeight) / 2;
+    }
+
+    // Create new page with output dimensions
+    const newPage = finalPdf.addPage([outputWidth, outputHeight]);
+
+    // Draw background image (stretched to full page)
+    newPage.drawImage(embeddedBg, {
+      x: 0,
+      y: 0,
+      width: outputWidth,
+      height: outputHeight
     });
-  };
 
-  // Helper: Extract first page from PDF as image
-  const extractPdfFirstPage = async (pdfFile: File): Promise<HTMLImageElement> => {
-    const arrayBuffer = await pdfFile.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({
-      data: arrayBuffer,
-      isEvalSupported: false,
-      useSystemFonts: true
-    }).promise;
-    const page = await pdf.getPage(1);
-
-    const viewport = page.getViewport({ scale: 3 });
-    const canvas = document.createElement('canvas');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    const ctx = canvas.getContext('2d')!;
-
-    await page.render({ canvasContext: ctx, viewport }).promise;
-
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = reject;
-      img.src = canvas.toDataURL('image/png');
+    // Draw the embedded PDF page on top
+    newPage.drawPage(embeddedPage, {
+      x,
+      y,
+      width: scaledWidth,
+      height: scaledHeight
     });
-  };
-
-  // Helper: Render composite image
-  const renderComposite = async (
-    background: HTMLImageElement,
-    pdfPage: HTMLImageElement,
-    offsetX: number,
-    offsetY: number
-  ): Promise<Blob> => {
-    const canvas = document.createElement('canvas');
-    canvas.width = CANVAS_W_PX;
-    canvas.height = CANVAS_H_PX;
-    const ctx = canvas.getContext('2d')!;
-
-    // Fill white background
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, CANVAS_W_PX, CANVAS_H_PX);
-
-    // Draw background image (stretched to canvas size)
-    ctx.drawImage(background, 0, 0, CANVAS_W_PX, CANVAS_H_PX);
-
-    // Calculate PDF position (center of canvas, then to the right side + offsets)
-    const offsetXpx = Math.round(offsetX * MM_TO_INCH * DPI);
-    const offsetYpx = Math.round(offsetY * MM_TO_INCH * DPI);
-    const centerX = CANVAS_W_PX / 2;
-    const pdfX = centerX + offsetXpx;
-    const centerY = (CANVAS_H_PX - PDF_H_PX) / 2;
-    const pdfY = centerY + offsetYpx;
-
-    // Draw PDF page (A4 landscape size: 297mm × 210mm)
-    ctx.drawImage(pdfPage, pdfX, pdfY, PDF_W_PX, PDF_H_PX);
-
-    return new Promise((resolve, reject) => {
-      canvas.toBlob(blob => {
-        if (blob) resolve(blob);
-        else reject(new Error('Failed to render composite'));
-      }, 'image/jpeg', 0.97);
-    });
-  };
-
-  // Process all PDF files
-  onProgress(`Processing ${pdfFiles.length} PDF file(s)...`);
-  const compositeBlobs: Blob[] = [];
-
-  for (let i = 0; i < pdfFiles.length; i++) {
-    onProgress(`Processing PDF ${i + 1}/${pdfFiles.length}: ${pdfFiles[i].name}`);
-
-    // Extract first page from PDF
-    const pdfPageImg = await extractPdfFirstPage(pdfFiles[i]);
-
-    // Remove white background
-    const transparentPdfImg = await removeWhiteBackground(pdfPageImg);
-
-    // Render composite
-    const compositeBlob = await renderComposite(
-      backgroundImg,
-      transparentPdfImg,
-      settings.offsetX,
-      settings.offsetY
-    );
-
-    compositeBlobs.push(compositeBlob);
   }
 
-  // Build final PDF from JPEG blobs
-  onProgress('Building final PDF...');
-
-  const pdfWidth = Math.round(CANVAS_W_MM * (72 / 25.4));
-  const pdfHeight = Math.round(CANVAS_H_MM * (72 / 25.4));
-
-  // Convert blobs to byte arrays
-  const imgByteArrays: Uint8Array[] = await Promise.all(
-    compositeBlobs.map(blob => blob.arrayBuffer().then(buf => new Uint8Array(buf)))
-  );
-
-  // Build PDF manually
-  const enc = new TextEncoder();
-  type Part = Uint8Array | string;
-  const parts: Part[] = [];
-  let byteOffset = 0;
-  const objOffsets: number[] = [];
-
-  const addBytes = (data: Uint8Array | string) => {
-    parts.push(data);
-    byteOffset += typeof data === 'string' ? enc.encode(data).length : data.byteLength;
-  };
-
-  const beginObj = (n: number) => {
-    objOffsets[n] = byteOffset;
-    addBytes(`${n} 0 obj\n`);
-  };
-  const endObj = () => addBytes(`endobj\n`);
-
-  addBytes(`%PDF-1.4\n%\xFF\xFF\xFF\xFF\n`);
-
-  const totalObjs = 2 + compositeBlobs.length * 3;
-
-  beginObj(1);
-  addBytes(`<< /Type /Catalog /Pages 2 0 R >>\n`);
-  endObj();
-
-  const kidRefs = compositeBlobs.map((_, i) => `${3 + i * 3} 0 R`).join(' ');
-  beginObj(2);
-  addBytes(`<< /Type /Pages /Kids [${kidRefs}] /Count ${compositeBlobs.length} >>\n`);
-  endObj();
-
-  for (let i = 0; i < compositeBlobs.length; i++) {
-    const pageObj = 3 + i * 3;
-    const imgObj = pageObj + 1;
-    const contentsObj = pageObj + 2;
-    const imgName = `Im${i + 1}`;
-
-    beginObj(pageObj);
-    addBytes(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pdfWidth} ${pdfHeight}]\n` +
-      `/Resources << /XObject << /${imgName} ${imgObj} 0 R >> >>\n` +
-      `/Contents ${contentsObj} 0 R >>\n`
-    );
-    endObj();
-
-    const imgData = imgByteArrays[i];
-    beginObj(imgObj);
-    addBytes(
-      `<< /Type /XObject /Subtype /Image /Width ${CANVAS_W_PX} /Height ${CANVAS_H_PX}\n` +
-      `/ColorSpace /DeviceRGB /BitsPerComponent 8\n` +
-      `/Filter /DCTDecode /Length ${imgData.byteLength} >>\n` +
-      `stream\n`
-    );
-    addBytes(imgData);
-    addBytes(`\nendstream\n`);
-    endObj();
-
-    const streamContent = `q ${pdfWidth} 0 0 ${pdfHeight} 0 0 cm /${imgName} Do Q`;
-    const streamBytes = enc.encode(streamContent);
-    beginObj(contentsObj);
-    addBytes(`<< /Length ${streamBytes.byteLength} >>\nstream\n`);
-    addBytes(streamBytes);
-    addBytes(`\nendstream\n`);
-    endObj();
-  }
-
-  const xrefPos = byteOffset;
-  const xrefEntries = [`0000000000 65535 f \n`];
-  for (let n = 1; n <= totalObjs; n++) {
-    xrefEntries.push(`${objOffsets[n].toString().padStart(10, '0')} 00000 n \n`);
-  }
-  addBytes(`xref\n0 ${totalObjs + 1}\n${xrefEntries.join('')}`);
-  addBytes(`trailer\n<< /Size ${totalObjs + 1} /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`);
-
-  const allBytes: Uint8Array[] = parts.map(p =>
-    typeof p === 'string' ? enc.encode(p) : p
-  );
-  const totalLen = allBytes.reduce((s, b) => s + b.byteLength, 0);
-  const out = new Uint8Array(totalLen);
-  let pos = 0;
-  for (const b of allBytes) {
-    out.set(b, pos);
-    pos += b.byteLength;
-  }
-
-  onProgress('PDF bundle created successfully!');
+  onProgress('Finalizing PDF...');
+  const pdfBytes = await finalPdf.save();
 
   return {
-    blob: new Blob([out], { type: 'application/pdf' }),
-    filename: 'book-covers-bundle.pdf'
+    blob: new Blob([pdfBytes], { type: 'application/pdf' }),
+    filename: 'canvas-wrapper-output.pdf'
   };
 }

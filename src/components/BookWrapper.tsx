@@ -23,13 +23,6 @@ const BookWrapper: React.FC = () => {
     centerVertically: true
   });
 
-  const [canvasSettings, setCanvasSettings] = useState({
-    orientation: 'landscape' as 'landscape' | 'portrait',
-    paperSize: '13x19-super-b',
-    offsetX: 0,
-    offsetY: 0,
-  });
-
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
@@ -131,7 +124,7 @@ const BookWrapper: React.FC = () => {
 
   const processCanvas = useCallback(async () => {
     if (!backgroundFile || pdfFiles.length === 0) {
-      setStatus({ message: 'Please select background image and at least one PDF file.', type: 'error' });
+      setStatus({ message: 'Please select background image and a PDF file.', type: 'error' });
       return;
     }
 
@@ -140,7 +133,7 @@ const BookWrapper: React.FC = () => {
     setDownloadUrl('');
 
     try {
-      const result = await processCanvasWrapper(backgroundFile, pdfFiles, canvasSettings, (message) => {
+      const result = await processCanvasWrapper(backgroundFile, pdfFiles[0], settings, (message) => {
         setStatus({ message, type: 'info' });
       });
 
@@ -160,7 +153,7 @@ const BookWrapper: React.FC = () => {
     } finally {
       setIsProcessing(false);
     }
-  }, [backgroundFile, pdfFiles, canvasSettings]);
+  }, [backgroundFile, pdfFiles, settings]);
 
   const getFileDisplay = () => {
     if (imageFiles.length === 0) return 'No files selected';
