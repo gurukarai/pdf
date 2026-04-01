@@ -1,22 +1,16 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { FileText, Image as ImageIcon, Download, CheckCircle, Loader2, RotateCcw, Eye, EyeOff, Lock, Zap, Calculator, Printer, CreditCard, Sparkles, FileImage, BookOpen, Image } from 'lucide-react';
-import * as pdfjsLib from 'pdfjs-dist';
-import FileUploader from './components/FileUploader';
-import ProcessingStatus from './components/ProcessingStatus';
-import CanvasPreview, { CANVAS_W_MM, CANVAS_H_MM, PDF_HALF_W_MM } from './components/CanvasPreview';
-import PositionControls from './components/PositionControls';
+import { useState } from 'react';
+import { FileText, Image as ImageIcon, Eye, EyeOff, Lock, Zap, Calculator, Printer, CreditCard, Sparkles, FileImage, BookOpen, Image } from 'lucide-react';
 import DualSideCardGenerator from './components/DualSideCardGenerator';
 import BookWrapper from './components/BookWrapper';
 import BookPrint from './components/BookPrint';
 import OCRProcessor from './components/OCRProcessor';
 import IntelligenceCollage from './components/IntelligenceCollage';
 import PageRangeCalculator from './components/PageRangeCalculator';
-import BookCoverCompositor from './components/BookCoverCompositor';
 import CardSheetGenerator from './components/CardSheetGenerator';
 import PdfManipulation from './components/PdfManipulation';
 import ImageTools from './components/ImageTools';
 
-type MainMode = 'card-sheet' | 'pdf-manipulation' | 'book-print' | 'image-tools' | 'dual-side-cards' | 'book-wrapper' | 'ocr' | 'intelligence-collage' | 'page-range-calculator' | 'book-cover-maker' | 'print-job-distributor' | 'book-cover-compositor';
+type MainMode = 'card-sheet' | 'pdf-manipulation' | 'book-print' | 'image-tools' | 'dual-side-cards' | 'book-wrapper' | 'ocr' | 'intelligence-collage' | 'page-range-calculator' | 'book-cover-maker' | 'print-job-distributor';
 
 const SECRET_KEY = '9578078500';
 
@@ -326,25 +320,6 @@ function App() {
               </label>
 
               <label className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
-                mainMode === 'book-cover-compositor'
-                  ? 'border-emerald-500 bg-emerald-50 shadow-md'
-                  : 'border-gray-300 bg-white hover:bg-gray-50'
-              }`}>
-                <input
-                  type="radio"
-                  name="main-mode"
-                  value="book-cover-compositor"
-                  checked={mainMode === 'book-cover-compositor'}
-                  onChange={(e) => setMainMode(e.target.value as MainMode)}
-                  className="sr-only"
-                />
-                <div className="flex items-center gap-3">
-                  <FileText className="w-6 h-6 text-emerald-600" />
-                  <span className="text-sm font-medium text-gray-700">Book Cover Compositor</span>
-                </div>
-              </label>
-
-              <label className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
                 mainMode === 'book-cover-maker'
                   ? 'border-cyan-500 bg-cyan-50 shadow-md'
                   : 'border-gray-300 bg-white hover:bg-gray-50'
@@ -395,8 +370,7 @@ function App() {
             {mainMode === 'ocr' && <OCRProcessor />}
             {mainMode === 'intelligence-collage' && <IntelligenceCollage />}
             {mainMode === 'page-range-calculator' && <PageRangeCalculator />}
-            {mainMode === 'book-cover-compositor' && <BookCoverCompositor />}
-            {mainMode === 'book-cover-maker' && (
+{mainMode === 'book-cover-maker' && (
               <div style={{ height: 'calc(100vh - 200px)', minHeight: '700px' }}>
                 <iframe
                   src="https://book-cover-generator-fnws.bolt.host/"

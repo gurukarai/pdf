@@ -6,6 +6,7 @@ import DownloadButton from './DownloadButton';
 import { BookWrapperSettings, StatusMessage as StatusMessageType } from '../types';
 import { processBookWrapper, processBookWrapperImages, processCanvasWrapper } from '../utils/pdfUtils';
 import { BOOK_PAGE_SIZES, OUTPUT_PAPER_SIZES } from '../constants';
+import BookCoverCompositor from './BookCoverCompositor';
 
 const BookWrapper: React.FC = () => {
   const [settings, setSettings] = useState<BookWrapperSettings>({
@@ -23,6 +24,7 @@ const BookWrapper: React.FC = () => {
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [isCanvasMode, setIsCanvasMode] = useState(false);
+  const [isCompositorMode, setIsCompositorMode] = useState(false);
   const [status, setStatus] = useState<StatusMessageType | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string>('');
@@ -186,7 +188,7 @@ const BookWrapper: React.FC = () => {
           <Settings className="w-5 h-5 text-gray-600" />
           <h3 className="text-lg font-semibold text-gray-800">Wrapper Settings</h3>
         </div>
-        
+
         {/* Preset Templates */}
         <div className="mb-6 p-4 bg-blue-50 rounded-lg">
           <h4 className="text-md font-semibold text-blue-800 mb-3">Wrapper Settings</h4>
@@ -194,6 +196,7 @@ const BookWrapper: React.FC = () => {
             <button
               onClick={() => {
                 setIsCanvasMode(false);
+                setIsCompositorMode(false);
                 setSettings({
                   bookPageSize: 'a4',
                   outputPaperSize: 'custom',
@@ -213,7 +216,7 @@ const BookWrapper: React.FC = () => {
                 });
               }}
               className={`px-4 py-2 rounded-md transition-colors duration-200 text-sm font-medium ${
-                !isCanvasMode ? 'bg-orange-600 text-white hover:bg-orange-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                !isCanvasMode && !isCompositorMode ? 'bg-orange-600 text-white hover:bg-orange-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
               Book Wrapper
@@ -221,6 +224,7 @@ const BookWrapper: React.FC = () => {
             <button
               onClick={() => {
                 setIsCanvasMode(false);
+                setIsCompositorMode(false);
                 setSettings({
                   bookPageSize: 'a4',
                   outputPaperSize: 'custom',
@@ -236,7 +240,7 @@ const BookWrapper: React.FC = () => {
                 });
               }}
               className={`px-4 py-2 rounded-md transition-colors duration-200 text-sm font-medium ${
-                !isCanvasMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                !isCanvasMode && !isCompositorMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
               Blue Binding Wrapper
@@ -244,6 +248,7 @@ const BookWrapper: React.FC = () => {
             <button
               onClick={() => {
                 setIsCanvasMode(true);
+                setIsCompositorMode(false);
                 setSettings({
                   bookPageSize: 'a4',
                   outputPaperSize: 'custom',
@@ -259,19 +264,38 @@ const BookWrapper: React.FC = () => {
                 });
               }}
               className={`px-4 py-2 rounded-md transition-colors duration-200 text-sm font-medium ${
-                isCanvasMode ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                isCanvasMode && !isCompositorMode ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
               Canvas Wrapper
+            </button>
+            <button
+              onClick={() => {
+                setIsCanvasMode(false);
+                setIsCompositorMode(true);
+              }}
+              className={`px-4 py-2 rounded-md transition-colors duration-200 text-sm font-medium ${
+                isCompositorMode ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Canvas Compositor
             </button>
           </div>
           <div className="mt-3 space-y-1 text-xs text-blue-700">
             <p><strong>Book Wrapper:</strong> A4 (210×297mm) right-aligned on 13×19" landscape with spine — 15mm right, 16mm top/bottom, 257mm left margin</p>
             <p><strong>Blue Binding Wrapper:</strong> A4 on 560×300mm — left binding margin (280mm left, 10mm top)</p>
             <p><strong>Canvas Wrapper:</strong> Places PDF first page as transparent on 13×19" template</p>
+            <p><strong>Canvas Compositor:</strong> Compose PDF covers onto a selectable landscape print canvas at 300 DPI</p>
           </div>
         </div>
+      </div>
 
+      {/* Canvas Compositor sub-mode */}
+      {isCompositorMode && (
+        <BookCoverCompositor />
+      )}
+
+      {!isCompositorMode && <div className="bg-gray-50 p-6 rounded-lg">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {/* Unit Selection */}
           <div>
@@ -576,10 +600,10 @@ const BookWrapper: React.FC = () => {
             <li>• <strong>Multiple Files:</strong> Each file becomes one page in the output PDF</li>
           </ul>
         </div>
-      </div>
+      </div>}
 
       {/* Template Upload - Only for Canvas Wrapper */}
-      {isCanvasMode && (
+      {!isCompositorMode && isCanvasMode && (
         <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
           <FileUpload
             id="templateImageInput"
@@ -594,40 +618,44 @@ const BookWrapper: React.FC = () => {
       )}
 
       {/* File Upload */}
-      <FileUpload
-        id="bookWrapperImageInput"
-        accept="image/jpeg,image/jpg,image/png,.jpg,.jpeg,.png,application/pdf,.pdf"
-        multiple
-        onFileChange={handleFileChange}
-        label={isCanvasMode ? "Upload PDFs" : "Upload Images or PDFs"}
-        description={isCanvasMode ? "Upload PDF files. First page of each PDF will be placed on the template." : "Drag & Drop or Click to Select — JPG, PNG, PDF supported. For multi-page PDFs, only the first page is used."}
-        fileCount={getFileDisplay()}
-      />
+      {!isCompositorMode && (
+        <FileUpload
+          id="bookWrapperImageInput"
+          accept="image/jpeg,image/jpg,image/png,.jpg,.jpeg,.png,application/pdf,.pdf"
+          multiple
+          onFileChange={handleFileChange}
+          label={isCanvasMode ? "Upload PDFs" : "Upload Images or PDFs"}
+          description={isCanvasMode ? "Upload PDF files. First page of each PDF will be placed on the template." : "Drag & Drop or Click to Select — JPG, PNG, PDF supported. For multi-page PDFs, only the first page is used."}
+          fileCount={getFileDisplay()}
+        />
+      )}
 
       {/* Process Button */}
-      <button
-        onClick={processWrapper}
-        disabled={isProcessing || imageFiles.length === 0 || (isCanvasMode && !templateFile)}
-        className="w-full bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:from-orange-600 hover:to-red-700 transition-all duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-orange-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-      >
-        {isProcessing ? (
-          <span className="flex items-center justify-center gap-2">
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            Processing...
-          </span>
-        ) : (
-          <span className="flex items-center justify-center gap-2">
-            <Zap className="w-5 h-5" />
-            {isCanvasMode ? 'Generate Canvas Wrapper' : 'Apply Wrapper'}
-          </span>
-        )}
-      </button>
+      {!isCompositorMode && (
+        <button
+          onClick={processWrapper}
+          disabled={isProcessing || imageFiles.length === 0 || (isCanvasMode && !templateFile)}
+          className="w-full bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:from-orange-600 hover:to-red-700 transition-all duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-orange-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+        >
+          {isProcessing ? (
+            <span className="flex items-center justify-center gap-2">
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              Processing...
+            </span>
+          ) : (
+            <span className="flex items-center justify-center gap-2">
+              <Zap className="w-5 h-5" />
+              {isCanvasMode ? 'Generate Canvas Wrapper' : 'Apply Wrapper'}
+            </span>
+          )}
+        </button>
+      )}
 
       {/* Status Message */}
-      <StatusMessage status={status} isProcessing={isProcessing} />
+      {!isCompositorMode && <StatusMessage status={status} isProcessing={isProcessing} />}
 
       {/* Download Link */}
-      {downloadUrl && (
+      {!isCompositorMode && downloadUrl && (
         <div className="text-center">
           <DownloadButton
             href={downloadUrl}
@@ -637,7 +665,6 @@ const BookWrapper: React.FC = () => {
           </DownloadButton>
         </div>
       )}
-      {/* End of Book Wrapper Mode */}
     </div>
   );
 };
