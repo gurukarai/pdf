@@ -3,7 +3,7 @@ import { FileText, Image as ImageIcon, Download, CheckCircle, Loader2, RotateCcw
 import * as pdfjsLib from 'pdfjs-dist';
 import FileUploader from './FileUploader';
 import ProcessingStatus from './ProcessingStatus';
-import CanvasPreview, { CANVAS_W_MM, CANVAS_H_MM, PDF_HALF_W_MM } from './CanvasPreview';
+import CanvasPreview from './CanvasPreview';
 import PositionControls from './PositionControls';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -17,11 +17,23 @@ interface ProcessingStep {
   message?: string;
 }
 
+interface PaperSize {
+  name: string;
+  widthMM: number;
+  heightMM: number;
+  widthInches: number;
+  heightInches: number;
+}
+
+const PAPER_SIZES: PaperSize[] = [
+  { name: '13×19 in', widthMM: 482.6, heightMM: 330.2, widthInches: 19, heightInches: 13 },
+  { name: '12×18 in', widthMM: 457.2, heightMM: 304.8, widthInches: 18, heightInches: 12 },
+  { name: 'A3', widthMM: 420, heightMM: 297, widthInches: 16.54, heightInches: 11.69 },
+  { name: 'A4', widthMM: 297, heightMM: 210, widthInches: 11.69, heightInches: 8.27 },
+];
+
 const DPI = 300;
 const MM_TO_INCH = 1 / 25.4;
-const CANVAS_W_PX = Math.round(CANVAS_W_MM * MM_TO_INCH * DPI);
-const CANVAS_H_PX = Math.round(CANVAS_H_MM * MM_TO_INCH * DPI);
-const PDF_HALF_W_PX = Math.round(PDF_HALF_W_MM * MM_TO_INCH * DPI);
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -97,26 +109,32 @@ async function renderComposite(
   backgroundImage: HTMLImageElement | null,
   pdfPageImage: HTMLImageElement | null,
   offsetX: number,
-  offsetY: number
+  offsetY: number,
+  canvasWidthMM: number,
+  canvasHeightMM: number
 ): Promise<Blob> {
+  const canvasWidthPx = Math.round(canvasWidthMM * MM_TO_INCH * DPI);
+  const canvasHeightPx = Math.round(canvasHeightMM * MM_TO_INCH * DPI);
+  const pdfHalfWidthPx = Math.round((canvasWidthMM / 2) * MM_TO_INCH * DPI);
+
   const canvas = document.createElement('canvas');
-  canvas.width = CANVAS_W_PX;
-  canvas.height = CANVAS_H_PX;
+  canvas.width = canvasWidthPx;
+  canvas.height = canvasHeightPx;
   const ctx = canvas.getContext('2d')!;
 
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, CANVAS_W_PX, CANVAS_H_PX);
+  ctx.fillRect(0, 0, canvasWidthPx, canvasHeightPx);
 
   if (backgroundImage) {
-    ctx.drawImage(backgroundImage, 0, 0, CANVAS_W_PX, CANVAS_H_PX);
+    ctx.drawImage(backgroundImage, 0, 0, canvasWidthPx, canvasHeightPx);
   }
 
   if (pdfPageImage) {
     const offsetXpx = Math.round(offsetX * MM_TO_INCH * DPI);
     const offsetYpx = Math.round(offsetY * MM_TO_INCH * DPI);
-    const pdfX = PDF_HALF_W_PX + offsetXpx;
+    const pdfX = pdfHalfWidthPx + offsetXpx;
     const pdfY = offsetYpx;
-    ctx.drawImage(pdfPageImage, pdfX, pdfY, PDF_HALF_W_PX, CANVAS_H_PX);
+    ctx.drawImage(pdfPageImage, pdfX, pdfY, pdfHalfWidthPx, canvasHeightPx);
   }
 
   return new Promise((resolve, reject) => {
@@ -127,9 +145,9 @@ async function renderComposite(
   });
 }
 
-async function buildPdfBundle(jpegBlobs: Blob[]): Promise<Blob> {
-  const pdfWidth = Math.round(CANVAS_W_MM * (72 / 25.4));
-  const pdfHeight = Math.round(CANVAS_H_MM * (72 / 25.4));
+async function buildPdfBundle(jpegBlobs: Blob[], canvasWidthMM: number, canvasHeightMM: number, canvasWidthPx: number, canvasHeightPx: number): Promise<Blob> {
+  const pdfWidth = Math.round(canvasWidthMM * (72 / 25.4));
+  const pdfHeight = Math.round(canvasHeightMM * (72 / 25.4));
 
   const imgByteArrays: Uint8Array[] = await Promise.all(
     jpegBlobs.map(blob => blob.arrayBuffer().then(buf => new Uint8Array(buf)))
@@ -182,7 +200,7 @@ async function buildPdfBundle(jpegBlobs: Blob[]): Promise<Blob> {
     const imgData = imgByteArrays[i];
     beginObj(imgObj);
     addBytes(
-      `<< /Type /XObject /Subtype /Image /Width ${CANVAS_W_PX} /Height ${CANVAS_H_PX}\n` +
+      `<< /Type /XObject /Subtype /Image /Width ${canvasWidthPx} /Height ${canvasHeightPx}\n` +
       `/ColorSpace /DeviceRGB /BitsPerComponent 8\n` +
       `/Filter /DCTDecode /Length ${imgData.byteLength} >>\n` +
       `stream\n`
@@ -233,6 +251,7 @@ export default function BookCoverCompositor() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [steps, setSteps] = useState<ProcessingStep[]>([]);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [selectedPaperSize, setSelectedPaperSize] = useState<PaperSize>(PAPER_SIZES[3]);
   const compositeCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -305,13 +324,15 @@ export default function BookCoverCompositor() {
       updateStep(3, 'processing');
       const compositeBlobs: Blob[] = [];
       for (const pageImg of strippedImages) {
-        const blob = await renderComposite(bgImg, pageImg, offsetX, offsetY);
+        const blob = await renderComposite(bgImg, pageImg, offsetX, offsetY, selectedPaperSize.widthMM, selectedPaperSize.heightMM);
         compositeBlobs.push(blob);
       }
       updateStep(3, 'complete');
 
       updateStep(4, 'processing');
-      const finalPdf = await buildPdfBundle(compositeBlobs);
+      const canvasWidthPx = Math.round(selectedPaperSize.widthMM * MM_TO_INCH * DPI);
+      const canvasHeightPx = Math.round(selectedPaperSize.heightMM * MM_TO_INCH * DPI);
+      const finalPdf = await buildPdfBundle(compositeBlobs, selectedPaperSize.widthMM, selectedPaperSize.heightMM, canvasWidthPx, canvasHeightPx);
       await new Promise(r => setTimeout(r, 200));
       updateStep(4, 'complete');
 
@@ -351,8 +372,36 @@ export default function BookCoverCompositor() {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-800 mb-2">Book Cover Compositor</h2>
         <p className="text-gray-600">
-          Compose PDF covers onto a 297 × 210 mm (A4 landscape) print canvas at 300 DPI
+          Compose PDF covers onto a landscape print canvas at 300 DPI
         </p>
+      </div>
+
+      <div className="mb-6 bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+        <label className="block text-sm font-semibold text-slate-700 mb-3">
+          Paper Size (Landscape)
+        </label>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {PAPER_SIZES.map((size) => (
+            <button
+              key={size.name}
+              onClick={() => setSelectedPaperSize(size)}
+              disabled={isProcessing}
+              className={`px-4 py-3 rounded-lg border-2 transition-all font-medium text-sm ${
+                selectedPaperSize.name === size.name
+                  ? 'border-blue-600 bg-blue-50 text-blue-700'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              <div className="font-bold">{size.name}</div>
+              <div className="text-xs mt-1 opacity-75">
+                {size.widthMM} × {size.heightMM} mm
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="mt-3 text-xs text-slate-500">
+          Selected: {selectedPaperSize.widthMM} × {selectedPaperSize.heightMM} mm ({selectedPaperSize.widthInches.toFixed(2)} × {selectedPaperSize.heightInches.toFixed(2)} in)
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6 mb-6">
@@ -369,6 +418,8 @@ export default function BookCoverCompositor() {
               pdfPageImage={pdfPreviewImg}
               offsetX={offsetX}
               offsetY={offsetY}
+              canvasWidthMM={selectedPaperSize.widthMM}
+              canvasHeightMM={selectedPaperSize.heightMM}
               onCompositeReady={handleCompositeReady}
             />
             {pdfFiles.length > 1 && (
@@ -404,7 +455,7 @@ export default function BookCoverCompositor() {
 
         <div className="space-y-5">
           <FileUploader
-            title="Background Image (13 × 19 in)"
+            title={`Background Image (${selectedPaperSize.name})`}
             icon={ImageIcon}
             accept=".jpg,.jpeg,.png"
             multiple={false}
@@ -465,9 +516,9 @@ export default function BookCoverCompositor() {
 
           <div className="bg-slate-50 rounded-xl border border-slate-200 p-5 text-xs text-slate-500 space-y-1">
             <p className="font-medium text-slate-600 mb-2">Output specs</p>
-            <p>Canvas: 297 × 210 mm (A4 landscape)</p>
+            <p>Canvas: {selectedPaperSize.widthMM} × {selectedPaperSize.heightMM} mm ({selectedPaperSize.name})</p>
             <p>Resolution: 300 DPI</p>
-            <p>Size: {CANVAS_W_PX.toLocaleString()} × {CANVAS_H_PX.toLocaleString()} px</p>
+            <p>Size: {Math.round(selectedPaperSize.widthMM * MM_TO_INCH * DPI).toLocaleString()} × {Math.round(selectedPaperSize.heightMM * MM_TO_INCH * DPI).toLocaleString()} px</p>
             <p>PDF cover placed on right half</p>
             <p>All processing runs locally in your browser</p>
           </div>
