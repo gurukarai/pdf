@@ -5,485 +5,426 @@ import FileUploader from './components/FileUploader';
 import ProcessingStatus from './components/ProcessingStatus';
 import CanvasPreview, { CANVAS_W_MM, CANVAS_H_MM, PDF_HALF_W_MM } from './components/CanvasPreview';
 import PositionControls from './components/PositionControls';
+import DualSideCardGenerator from './components/DualSideCardGenerator';
+import BookWrapper from './components/BookWrapper';
+import BookPrint from './components/BookPrint';
+import OCRProcessor from './components/OCRProcessor';
+import IntelligenceCollage from './components/IntelligenceCollage';
+import PageRangeCalculator from './components/PageRangeCalculator';
+import BookCoverCompositor from './components/BookCoverCompositor';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.mjs',
-  import.meta.url
-).toString();
+type MainMode = 'card-sheet' | 'pdf-manipulation' | 'book-print' | 'image-tools' | 'dual-side-cards' | 'book-wrapper' | 'ocr' | 'intelligence-collage' | 'page-range-calculator' | 'book-cover-maker' | 'print-job-distributor' | 'book-cover-compositor';
 
-interface ProcessingStep {
-  name: string;
-  status: 'pending' | 'processing' | 'complete' | 'error';
-  message?: string;
-}
+const SECRET_KEY = '9578078500';
 
-const DPI = 300;
-const MM_TO_INCH = 1 / 25.4;
-const CANVAS_W_PX = Math.round(CANVAS_W_MM * MM_TO_INCH * DPI);
-const CANVAS_H_PX = Math.round(CANVAS_H_MM * MM_TO_INCH * DPI);
-const PDF_HALF_W_PX = Math.round(PDF_HALF_W_MM * MM_TO_INCH * DPI);
+function App() {
+  const [mainMode, setMainMode] = useState<MainMode>('card-sheet');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [secretKeyInput, setSecretKeyInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [authError, setAuthError] = useState('');
 
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new window.Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-async function extractPdfFirstPage(pdfFile: File): Promise<HTMLImageElement> {
-  const arrayBuffer = await pdfFile.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, isEvalSupported: false, useSystemFonts: true }).promise;
-  const page = await pdf.getPage(1);
-
-  const viewport = page.getViewport({ scale: 3 });
-  const canvas = document.createElement('canvas');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  const ctx = canvas.getContext('2d')!;
-
-  await page.render({ canvasContext: ctx, viewport }).promise;
-
-  return new Promise((resolve, reject) => {
-    const img = new window.Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = canvas.toDataURL('image/png');
-  });
-}
-
-function removeWhiteBackground(src: HTMLImageElement): Promise<HTMLImageElement> {
-  const canvas = document.createElement('canvas');
-  const w = src.naturalWidth || src.width;
-  const h = src.naturalHeight || src.height;
-  if (w === 0 || h === 0) {
-    return Promise.resolve(src);
-  }
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d')!;
-  ctx.drawImage(src, 0, 0);
-  const imageData = ctx.getImageData(0, 0, w, h);
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    if (r > 240 && g > 240 && b > 240) {
-      data[i + 3] = 0;
-    }
-  }
-  ctx.putImageData(imageData, 0, 0);
-
-  return new Promise((resolve, reject) => {
-    const result = new window.Image();
-    result.onload = () => resolve(result);
-    result.onerror = reject;
-    result.src = canvas.toDataURL('image/png');
-  });
-}
-
-async function renderComposite(
-  backgroundImage: HTMLImageElement | null,
-  pdfPageImage: HTMLImageElement | null,
-  offsetX: number,
-  offsetY: number
-): Promise<Blob> {
-  const canvas = document.createElement('canvas');
-  canvas.width = CANVAS_W_PX;
-  canvas.height = CANVAS_H_PX;
-  const ctx = canvas.getContext('2d')!;
-
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, CANVAS_W_PX, CANVAS_H_PX);
-
-  if (backgroundImage) {
-    ctx.drawImage(backgroundImage, 0, 0, CANVAS_W_PX, CANVAS_H_PX);
-  }
-
-  if (pdfPageImage) {
-    const offsetXpx = Math.round(offsetX * MM_TO_INCH * DPI);
-    const offsetYpx = Math.round(offsetY * MM_TO_INCH * DPI);
-    const pdfX = PDF_HALF_W_PX + offsetXpx;
-    const pdfY = offsetYpx;
-    ctx.drawImage(pdfPageImage, pdfX, pdfY, PDF_HALF_W_PX, CANVAS_H_PX);
-  }
-
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(blob => {
-      if (blob) resolve(blob);
-      else reject(new Error('Failed to render composite'));
-    }, 'image/jpeg', 0.97);
-  });
-}
-
-async function buildPdfBundle(jpegBlobs: Blob[]): Promise<Blob> {
-  const pdfWidth = Math.round(CANVAS_W_MM * (72 / 25.4));
-  const pdfHeight = Math.round(CANVAS_H_MM * (72 / 25.4));
-
-  const imgByteArrays: Uint8Array[] = await Promise.all(
-    jpegBlobs.map(blob => blob.arrayBuffer().then(buf => new Uint8Array(buf)))
-  );
-
-  const enc = new TextEncoder();
-  type Part = Uint8Array | string;
-  const parts: Part[] = [];
-  let byteOffset = 0;
-  const objOffsets: number[] = [];
-
-  const addBytes = (data: Uint8Array | string) => {
-    parts.push(data);
-    byteOffset += typeof data === 'string' ? enc.encode(data).length : data.byteLength;
-  };
-
-  const beginObj = (n: number) => {
-    objOffsets[n] = byteOffset;
-    addBytes(`${n} 0 obj\n`);
-  };
-  const endObj = () => addBytes(`endobj\n`);
-
-  addBytes(`%PDF-1.4\n%\xFF\xFF\xFF\xFF\n`);
-
-  const totalObjs = 2 + jpegBlobs.length * 3;
-
-  beginObj(1);
-  addBytes(`<< /Type /Catalog /Pages 2 0 R >>\n`);
-  endObj();
-
-  const kidRefs = jpegBlobs.map((_, i) => `${3 + i * 3} 0 R`).join(' ');
-  beginObj(2);
-  addBytes(`<< /Type /Pages /Kids [${kidRefs}] /Count ${jpegBlobs.length} >>\n`);
-  endObj();
-
-  for (let i = 0; i < jpegBlobs.length; i++) {
-    const pageObj = 3 + i * 3;
-    const imgObj = pageObj + 1;
-    const contentsObj = pageObj + 2;
-    const imgName = `Im${i + 1}`;
-
-    beginObj(pageObj);
-    addBytes(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pdfWidth} ${pdfHeight}]\n` +
-      `/Resources << /XObject << /${imgName} ${imgObj} 0 R >> >>\n` +
-      `/Contents ${contentsObj} 0 R >>\n`
-    );
-    endObj();
-
-    const imgData = imgByteArrays[i];
-    beginObj(imgObj);
-    addBytes(
-      `<< /Type /XObject /Subtype /Image /Width ${CANVAS_W_PX} /Height ${CANVAS_H_PX}\n` +
-      `/ColorSpace /DeviceRGB /BitsPerComponent 8\n` +
-      `/Filter /DCTDecode /Length ${imgData.byteLength} >>\n` +
-      `stream\n`
-    );
-    addBytes(imgData);
-    addBytes(`\nendstream\n`);
-    endObj();
-
-    const streamContent = `q ${pdfWidth} 0 0 ${pdfHeight} 0 0 cm /${imgName} Do Q`;
-    const streamBytes = enc.encode(streamContent);
-    beginObj(contentsObj);
-    addBytes(`<< /Length ${streamBytes.byteLength} >>\nstream\n`);
-    addBytes(streamBytes);
-    addBytes(`\nendstream\n`);
-    endObj();
-  }
-
-  const xrefPos = byteOffset;
-  const xrefEntries = [`0000000000 65535 f \n`];
-  for (let n = 1; n <= totalObjs; n++) {
-    xrefEntries.push(`${objOffsets[n].toString().padStart(10, '0')} 00000 n \n`);
-  }
-  addBytes(`xref\n0 ${totalObjs + 1}\n${xrefEntries.join('')}`);
-  addBytes(`trailer\n<< /Size ${totalObjs + 1} /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`);
-
-  const allBytes: Uint8Array[] = parts.map(p =>
-    typeof p === 'string' ? enc.encode(p) : p
-  );
-  const totalLen = allBytes.reduce((s, b) => s + b.byteLength, 0);
-  const out = new Uint8Array(totalLen);
-  let pos = 0;
-  for (const b of allBytes) {
-    out.set(b, pos);
-    pos += b.byteLength;
-  }
-
-  return new Blob([out], { type: 'application/pdf' });
-}
-
-export default function App() {
-  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
-  const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
-  const [backgroundImg, setBackgroundImg] = useState<HTMLImageElement | null>(null);
-  const [pdfPreviewImg, setPdfPreviewImg] = useState<HTMLImageElement | null>(null);
-  const [previewPdfIndex, setPreviewPdfIndex] = useState(0);
-  const [offsetX, setOffsetX] = useState(0);
-  const [offsetY, setOffsetY] = useState(0);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [steps, setSteps] = useState<ProcessingStep[]>([]);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const compositeCanvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    if (!backgroundFile) {
-      setBackgroundImg(null);
-      return;
-    }
-    readFileAsDataUrl(backgroundFile).then(url => loadImage(url)).then(setBackgroundImg);
-  }, [backgroundFile]);
-
-  useEffect(() => {
-    if (pdfFiles.length === 0) {
-      setPdfPreviewImg(null);
-      return;
-    }
-    const idx = Math.min(previewPdfIndex, pdfFiles.length - 1);
-    extractPdfFirstPage(pdfFiles[idx])
-      .then(img => removeWhiteBackground(img))
-      .then(setPdfPreviewImg)
-      .catch(() => setPdfPreviewImg(null));
-  }, [pdfFiles, previewPdfIndex]);
-
-  const updateStep = (index: number, status: ProcessingStep['status'], message?: string) => {
-    setSteps(prev => prev.map((step, i) =>
-      i === index ? { ...step, status, ...(message ? { message } : {}) } : step
-    ));
-  };
-
-  const handleProcess = async () => {
-    if (pdfFiles.length === 0) {
-      alert('Please upload at least one PDF file');
-      return;
-    }
-
-    setIsProcessing(true);
-    setDownloadUrl(null);
-
-    const initialSteps: ProcessingStep[] = [
-      { name: 'Loading background image', status: 'pending' },
-      { name: 'Extracting PDF first pages', status: 'pending' },
-      { name: 'Removing white backgrounds', status: 'pending' },
-      { name: 'Rendering composites at 300 DPI', status: 'pending' },
-      { name: 'Building final PDF bundle', status: 'pending' },
-    ];
-    setSteps(initialSteps);
-
-    try {
-      updateStep(0, 'processing');
-      let bgImg: HTMLImageElement | null = backgroundImg;
-      if (!bgImg && backgroundFile) {
-        const url = await readFileAsDataUrl(backgroundFile);
-        bgImg = await loadImage(url);
-      }
-      await new Promise(r => setTimeout(r, 200));
-      updateStep(0, 'complete');
-
-      updateStep(1, 'processing');
-      const rawPageImages: HTMLImageElement[] = [];
-      for (const pdfFile of pdfFiles) {
-        const img = await extractPdfFirstPage(pdfFile);
-        rawPageImages.push(img);
-      }
-      updateStep(1, 'complete');
-
-      updateStep(2, 'processing');
-      const strippedImages = await Promise.all(rawPageImages.map(img => removeWhiteBackground(img)));
-      await new Promise(r => setTimeout(r, 200));
-      updateStep(2, 'complete');
-
-      updateStep(3, 'processing');
-      const compositeBlobs: Blob[] = [];
-      for (const pageImg of strippedImages) {
-        const blob = await renderComposite(bgImg, pageImg, offsetX, offsetY);
-        compositeBlobs.push(blob);
-      }
-      updateStep(3, 'complete');
-
-      updateStep(4, 'processing');
-      const finalPdf = await buildPdfBundle(compositeBlobs);
-      await new Promise(r => setTimeout(r, 200));
-      updateStep(4, 'complete');
-
-      const url = URL.createObjectURL(finalPdf);
-      setDownloadUrl(url);
-    } catch (error) {
-      setSteps(prev => prev.map(step =>
-        step.status === 'processing'
-          ? { ...step, status: 'error', message: error instanceof Error ? error.message : 'Processing failed' }
-          : step
-      ));
-    } finally {
-      setIsProcessing(false);
+  const handleSecretKeySubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (secretKeyInput === SECRET_KEY) {
+      setIsAuthenticated(true);
+      setAuthError('');
+    } else {
+      setAuthError('Invalid secret key. Please try again.');
+      setSecretKeyInput('');
     }
   };
 
-  const handleReset = () => {
-    if (downloadUrl) URL.revokeObjectURL(downloadUrl);
-    setPdfFiles([]);
-    setBackgroundFile(null);
-    setBackgroundImg(null);
-    setPdfPreviewImg(null);
-    setOffsetX(0);
-    setOffsetY(0);
-    setSteps([]);
-    setDownloadUrl(null);
-    setIsProcessing(false);
-    setPreviewPdfIndex(0);
-  };
-
-  const handleCompositeReady = useCallback((canvas: HTMLCanvasElement) => {
-    compositeCanvasRef.current = canvas;
-  }, []);
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
-        <header className="mb-10 text-center">
-          <div className="flex items-center justify-center mb-4">
-            <FileText className="w-11 h-11 text-blue-600" />
-          </div>
-          <h1 className="text-4xl font-bold text-slate-800 mb-2">
-            Book Cover Compositor
-          </h1>
-          <p className="text-slate-500 text-base">
-            Compose PDF covers onto a 297 &times; 210 mm (A4 landscape) print canvas at 300 DPI
-          </p>
-        </header>
-
-        <div className="grid lg:grid-cols-3 gap-8 mb-8">
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2 text-lg">
-                Preview
-              </h2>
-              <p className="text-xs text-slate-400 mb-4">
-                Background (left) + PDF cover page (right) &mdash; dashed line marks the center fold
-              </p>
-              <CanvasPreview
-                backgroundImage={backgroundImg}
-                pdfPageImage={pdfPreviewImg}
-                offsetX={offsetX}
-                offsetY={offsetY}
-                onCompositeReady={handleCompositeReady}
-              />
-              {pdfFiles.length > 1 && (
-                <div className="mt-3 flex items-center gap-2">
-                  <span className="text-xs text-slate-500">Preview page:</span>
-                  <div className="flex gap-1 flex-wrap">
-                    {pdfFiles.map((f, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setPreviewPdfIndex(i)}
-                        className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
-                          previewPdfIndex === i
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        {i + 1}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+  // If not authenticated, show the login screen
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900 flex items-center justify-center py-8 px-4" style={{ fontFamily: 'Inter, sans-serif' }}>
+        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
+                <Lock className="w-8 h-8 text-white" />
+              </div>
+              <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">
+                Secure Access
+              </h1>
             </div>
-
-            <PositionControls
-              offsetX={offsetX}
-              offsetY={offsetY}
-              onOffsetXChange={setOffsetX}
-              onOffsetYChange={setOffsetY}
-              disabled={isProcessing}
-            />
+            <p className="text-lg text-gray-600">
+              Enter the secret key to access the Ultimate PDF Tool
+            </p>
           </div>
 
-          <div className="space-y-5">
-            <FileUploader
-              title="Background Image (13 × 19 in)"
-              icon={ImageIcon}
-              accept=".jpg,.jpeg,.png"
-              multiple={false}
-              files={backgroundFile ? [backgroundFile] : []}
-              onFilesChange={files => setBackgroundFile(files[0] || null)}
-              disabled={isProcessing}
-            />
-
-            <FileUploader
-              title="PDF Cover Files"
-              icon={FileText}
-              accept=".pdf"
-              multiple={true}
-              files={pdfFiles}
-              onFilesChange={setPdfFiles}
-              disabled={isProcessing}
-            />
-
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-3">
-              <button
-                onClick={handleProcess}
-                disabled={isProcessing || pdfFiles.length === 0}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-5 h-5" />
-                    Generate PDF Bundle
-                  </>
-                )}
-              </button>
-
-              {downloadUrl && (
-                <a
-                  href={downloadUrl}
-                  download="book_covers_bundle.pdf"
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+          <form onSubmit={handleSecretKeySubmit} className="space-y-6">
+            <div>
+              <label htmlFor="secretKey" className="block text-sm font-medium text-gray-700 mb-2">
+                Secret Key
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="secretKey"
+                  value={secretKeyInput}
+                  onChange={(e) => {
+                    setSecretKeyInput(e.target.value);
+                    setAuthError('');
+                  }}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 pr-12"
+                  placeholder="Enter secret key"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors duration-200"
                 >
-                  <Download className="w-5 h-5" />
-                  Download PDF Bundle
-                </a>
-              )}
-
-              <button
-                onClick={handleReset}
-                disabled={isProcessing}
-                className="w-full bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Reset
-              </button>
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
+                </button>
+              </div>
             </div>
 
-            <div className="bg-slate-50 rounded-xl border border-slate-200 p-5 text-xs text-slate-500 space-y-1">
-              <p className="font-medium text-slate-600 mb-2">Output specs</p>
-              <p>Canvas: 297 &times; 210 mm (A4 landscape)</p>
-              <p>Resolution: 300 DPI</p>
-              <p>Size: {CANVAS_W_PX.toLocaleString()} &times; {CANVAS_H_PX.toLocaleString()} px</p>
-              <p>PDF cover placed on right half</p>
-              <p>All processing runs locally in your browser</p>
+            {authError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-red-800 text-sm font-medium">{authError}</p>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:from-blue-600 hover:to-indigo-700 transition-all duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-300"
+            >
+              <span className="flex items-center justify-center gap-2">
+                <Lock className="w-5 h-5" />
+                Access Application
+              </span>
+            </button>
+          </form>
+
+          <div className="mt-8 text-center">
+            <div className="bg-blue-50 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-blue-800 mb-2">What you'll get access to:</h3>
+              <ul className="text-sm text-blue-700 space-y-1 text-left">
+                <li>• Image to Card Sheet PDF Generator</li>
+                <li>• Advanced PDF Manipulation Tools</li>
+                <li>• Professional Image Tools</li>
+                <li>• Dual-Side ID Card Generator</li>
+              </ul>
             </div>
           </div>
         </div>
+      </div>
+    );
+  }
 
-        {steps.length > 0 && (
-          <ProcessingStatus steps={steps} />
-        )}
+  // Main application (only shown when authenticated)
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 px-4" style={{ fontFamily: 'Inter, sans-serif' }}>
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
+              <Zap className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-4xl font-extrabold text-gray-800 tracking-tight">
+              Ultimate PDF Tool
+            </h1>
+            <button
+              onClick={() => setIsAuthenticated(false)}
+              className="ml-4 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+              title="Logout"
+            >
+              <Lock className="w-5 h-5" />
+            </button>
+          </div>
+          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+            Generate card sheets from images, manipulate existing PDFs, split images into multiple parts, or create dual-side ID cards with professional-grade tools.
+          </p>
+        </div>
+
+        {/* Main Container */}
+        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+          {/* Mode Selection */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Select Operation</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <label className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                mainMode === 'card-sheet' 
+                  ? 'border-blue-500 bg-blue-50 shadow-md' 
+                  : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="main-mode"
+                  value="card-sheet"
+                  checked={mainMode === 'card-sheet'}
+                  onChange={(e) => setMainMode(e.target.value as MainMode)}
+                  className="sr-only"
+                />
+                <div className="flex items-center gap-3">
+                  <FileImage className="w-6 h-6 text-blue-600" />
+                  <span className="text-sm font-medium text-gray-700">Image to Card Sheet PDF</span>
+                </div>
+              </label>
+              
+              <label className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                mainMode === 'pdf-manipulation' 
+                  ? 'border-indigo-500 bg-indigo-50 shadow-md' 
+                  : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="main-mode"
+                  value="pdf-manipulation"
+                  checked={mainMode === 'pdf-manipulation'}
+                  onChange={(e) => setMainMode(e.target.value as MainMode)}
+                  className="sr-only"
+                />
+                <div className="flex items-center gap-3">
+                  <FileText className="w-6 h-6 text-indigo-600" />
+                  <span className="text-sm font-medium text-gray-700">PDF Manipulation</span>
+                </div>
+              </label>
+
+              <label className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                mainMode === 'book-print' 
+                  ? 'border-violet-500 bg-violet-50 shadow-md' 
+                  : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="main-mode"
+                  value="book-print"
+                  checked={mainMode === 'book-print'}
+                  onChange={(e) => setMainMode(e.target.value as MainMode)}
+                  className="sr-only"
+                />
+                <div className="flex items-center gap-3">
+                  <FileText className="w-6 h-6 text-violet-600" />
+                  <span className="text-sm font-medium text-gray-700">Book Print</span>
+                </div>
+              </label>
+
+              <label className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                mainMode === 'image-tools'
+                  ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                  : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="main-mode"
+                  value="image-tools"
+                  checked={mainMode === 'image-tools'}
+                  onChange={(e) => setMainMode(e.target.value as MainMode)}
+                  className="sr-only"
+                />
+                <div className="flex items-center gap-3">
+                  <Image className="w-6 h-6 text-emerald-600" />
+                  <span className="text-sm font-medium text-gray-700">Image Tools</span>
+                </div>
+              </label>
+
+              <label className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                mainMode === 'dual-side-cards' 
+                  ? 'border-purple-500 bg-purple-50 shadow-md' 
+                  : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="main-mode"
+                  value="dual-side-cards"
+                  checked={mainMode === 'dual-side-cards'}
+                  onChange={(e) => setMainMode(e.target.value as MainMode)}
+                  className="sr-only"
+                />
+                <div className="flex items-center gap-3">
+                  <CreditCard className="w-6 h-6 text-purple-600" />
+                  <span className="text-sm font-medium text-gray-700">Dual-Side ID Cards</span>
+                </div>
+              </label>
+
+              <label className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                mainMode === 'book-wrapper' 
+                  ? 'border-orange-500 bg-orange-50 shadow-md' 
+                  : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="main-mode"
+                  value="book-wrapper"
+                  checked={mainMode === 'book-wrapper'}
+                  onChange={(e) => setMainMode(e.target.value as MainMode)}
+                  className="sr-only"
+                />
+                <div className="flex items-center gap-3">
+                  <FileText className="w-6 h-6 text-orange-600" />
+                  <span className="text-sm font-medium text-gray-700">Book Wrapper</span>
+                </div>
+              </label>
+              
+              <label className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                mainMode === 'ocr' 
+                  ? 'border-teal-500 bg-teal-50 shadow-md' 
+                  : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="main-mode"
+                  value="ocr"
+                  checked={mainMode === 'ocr'}
+                  onChange={(e) => setMainMode(e.target.value as MainMode)}
+                  className="sr-only"
+                />
+                <div className="flex items-center gap-3">
+                  <FileText className="w-6 h-6 text-teal-600" />
+                  <span className="text-sm font-medium text-gray-700">OCR Text Extraction</span>
+                </div>
+              </label>
+
+              <label className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                mainMode === 'intelligence-collage'
+                  ? 'border-pink-500 bg-pink-50 shadow-md'
+                  : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="main-mode"
+                  value="intelligence-collage"
+                  checked={mainMode === 'intelligence-collage'}
+                  onChange={(e) => setMainMode(e.target.value as MainMode)}
+                  className="sr-only"
+                />
+                <div className="flex items-center gap-3">
+                  <Sparkles className="w-6 h-6 text-pink-600" />
+                  <span className="text-sm font-medium text-gray-700">Intelligence Collage</span>
+                </div>
+              </label>
+
+              <label className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                mainMode === 'page-range-calculator'
+                  ? 'border-blue-500 bg-blue-50 shadow-md'
+                  : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="main-mode"
+                  value="page-range-calculator"
+                  checked={mainMode === 'page-range-calculator'}
+                  onChange={(e) => setMainMode(e.target.value as MainMode)}
+                  className="sr-only"
+                />
+                <div className="flex items-center gap-3">
+                  <Calculator className="w-6 h-6 text-blue-600" />
+                  <span className="text-sm font-medium text-gray-700">Color - Mono Pages Splitter</span>
+                </div>
+              </label>
+
+              <label className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                mainMode === 'book-cover-compositor'
+                  ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                  : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="main-mode"
+                  value="book-cover-compositor"
+                  checked={mainMode === 'book-cover-compositor'}
+                  onChange={(e) => setMainMode(e.target.value as MainMode)}
+                  className="sr-only"
+                />
+                <div className="flex items-center gap-3">
+                  <FileText className="w-6 h-6 text-emerald-600" />
+                  <span className="text-sm font-medium text-gray-700">Book Cover Compositor</span>
+                </div>
+              </label>
+
+              <label className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                mainMode === 'book-cover-maker'
+                  ? 'border-cyan-500 bg-cyan-50 shadow-md'
+                  : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="main-mode"
+                  value="book-cover-maker"
+                  checked={mainMode === 'book-cover-maker'}
+                  onChange={(e) => setMainMode(e.target.value as MainMode)}
+                  className="sr-only"
+                />
+                <div className="flex items-center gap-3">
+                  <BookOpen className="w-6 h-6 text-cyan-600" />
+                  <span className="text-sm font-medium text-gray-700">Book Cover Maker</span>
+                </div>
+              </label>
+
+              <label className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                mainMode === 'print-job-distributor'
+                  ? 'border-red-500 bg-red-50 shadow-md'
+                  : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="main-mode"
+                  value="print-job-distributor"
+                  checked={mainMode === 'print-job-distributor'}
+                  onChange={(e) => setMainMode(e.target.value as MainMode)}
+                  className="sr-only"
+                />
+                <div className="flex items-center gap-3">
+                  <Printer className="w-6 h-6 text-red-600" />
+                  <span className="text-sm font-medium text-gray-700">Print Job Distributor</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Content Area */}
+          <div className={mainMode === 'book-cover-maker' || mainMode === 'print-job-distributor' ? 'p-0' : 'p-8'}>
+            {mainMode === 'card-sheet' && <CardSheetGenerator />}
+            {mainMode === 'pdf-manipulation' && <PdfManipulation />}
+            {mainMode === 'book-print' && <BookPrint />}
+            {mainMode === 'image-tools' && <ImageTools />}
+            {mainMode === 'dual-side-cards' && <DualSideCardGenerator />}
+            {mainMode === 'book-wrapper' && <BookWrapper />}
+            {mainMode === 'ocr' && <OCRProcessor />}
+            {mainMode === 'intelligence-collage' && <IntelligenceCollage />}
+            {mainMode === 'page-range-calculator' && <PageRangeCalculator />}
+            {mainMode === 'book-cover-compositor' && <BookCoverCompositor />}
+            {mainMode === 'book-cover-maker' && (
+              <div style={{ height: 'calc(100vh - 200px)', minHeight: '700px' }}>
+                <iframe
+                  src="https://book-cover-generator-fnws.bolt.host/"
+                  className="w-full h-full"
+                  title="Book Cover Maker"
+                  style={{ border: 'none', display: 'block' }}
+                  allow="clipboard-read; clipboard-write"
+                />
+              </div>
+            )}
+            {mainMode === 'print-job-distributor' && (
+              <div style={{ height: 'calc(100vh - 200px)', minHeight: '700px' }}>
+                <iframe
+                  src="https://distributed-print-ma-fbx9.bolt.host/"
+                  className="w-full h-full"
+                  title="Print Job Distributor"
+                  style={{ border: 'none', display: 'block' }}
+                  allow="clipboard-read; clipboard-write"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="text-center mt-8 text-gray-500 text-sm">
+          <p>Professional PDF and image processing tools for creators and professionals.</p>
+        </div>
       </div>
     </div>
   );
 }
+
+export default App;
