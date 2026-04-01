@@ -4,7 +4,7 @@ import FileUpload from './FileUpload';
 import StatusMessage from './StatusMessage';
 import DownloadButton from './DownloadButton';
 import { BookWrapperSettings, StatusMessage as StatusMessageType } from '../types';
-import { processBookWrapper, processBookWrapperImages } from '../utils/pdfUtils';
+import { processBookWrapper, processBookWrapperImages, processCanvasWrapper } from '../utils/pdfUtils';
 import { BOOK_PAGE_SIZES, OUTPUT_PAPER_SIZES } from '../constants';
 
 const BookWrapper: React.FC = () => {
@@ -21,6 +21,8 @@ const BookWrapper: React.FC = () => {
   });
 
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [templateFile, setTemplateFile] = useState<File | null>(null);
+  const [isCanvasMode, setIsCanvasMode] = useState(false);
   const [status, setStatus] = useState<StatusMessageType | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string>('');
@@ -29,6 +31,14 @@ const BookWrapper: React.FC = () => {
   const handleFileChange = useCallback((files: FileList | null) => {
     if (files) {
       setImageFiles(Array.from(files));
+      setStatus(null);
+      setDownloadUrl('');
+    }
+  }, []);
+
+  const handleTemplateChange = useCallback((files: FileList | null) => {
+    if (files && files.length > 0) {
+      setTemplateFile(files[0]);
       setStatus(null);
       setDownloadUrl('');
     }
@@ -73,24 +83,39 @@ const BookWrapper: React.FC = () => {
       return;
     }
 
+    if (isCanvasMode && !templateFile) {
+      setStatus({ message: 'Please upload a template image for Canvas Wrapper mode.', type: 'error' });
+      return;
+    }
+
     setIsProcessing(true);
     setStatus(null);
     setDownloadUrl('');
 
     try {
-      const result = await processBookWrapperImages(imageFiles, settings, (message) => {
-        setStatus({ message, type: 'info' });
-      });
+      let result;
+
+      if (isCanvasMode && templateFile) {
+        // Process canvas wrapper - one page per PDF
+        result = await processCanvasWrapper(templateFile, imageFiles[0], settings, (message) => {
+          setStatus({ message, type: 'info' });
+        });
+      } else {
+        // Process book wrapper normally
+        result = await processBookWrapperImages(imageFiles, settings, (message) => {
+          setStatus({ message, type: 'info' });
+        });
+      }
 
       const url = URL.createObjectURL(result.blob);
       setDownloadUrl(url);
       setDownloadFilename(result.filename);
       setStatus({
-        message: `✅ Success! Book wrapper applied successfully.`,
+        message: `✅ Success! ${isCanvasMode ? 'Canvas wrapper' : 'Book wrapper'} applied successfully.`,
         type: 'success'
       });
     } catch (error) {
-      console.error('Book wrapper processing error:', error);
+      console.error('Wrapper processing error:', error);
       setStatus({
         message: `An error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`,
         type: 'error'
@@ -98,7 +123,7 @@ const BookWrapper: React.FC = () => {
     } finally {
       setIsProcessing(false);
     }
-  }, [imageFiles, settings]);
+  }, [imageFiles, templateFile, isCanvasMode, settings]);
 
 
   const getFileDisplay = () => {
@@ -167,60 +192,75 @@ const BookWrapper: React.FC = () => {
           <h4 className="text-md font-semibold text-blue-800 mb-3">Wrapper Settings</h4>
           <div className="flex flex-wrap gap-3">
             <button
-              onClick={() => setSettings({
-                bookPageSize: 'a4',
-                outputPaperSize: 'custom',
-                customOutputWidth: 482.6,
-                customOutputHeight: 330.2,
-                unit: 'mm',
-                marginTop: 16,
-                marginBottom: 16,
-                marginLeft: 257,
-                marginRight: 15,
-                centerHorizontally: false,
-                centerVertically: false,
-                enableSpine: true,
-                spineWidth: 10,
-                spineTickLength: 5,
-                spineOverlap: 3,
-              })}
-              className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 transition-colors duration-200 text-sm font-medium"
+              onClick={() => {
+                setIsCanvasMode(false);
+                setSettings({
+                  bookPageSize: 'a4',
+                  outputPaperSize: 'custom',
+                  customOutputWidth: 482.6,
+                  customOutputHeight: 330.2,
+                  unit: 'mm',
+                  marginTop: 16,
+                  marginBottom: 16,
+                  marginLeft: 257,
+                  marginRight: 15,
+                  centerHorizontally: false,
+                  centerVertically: false,
+                  enableSpine: true,
+                  spineWidth: 10,
+                  spineTickLength: 5,
+                  spineOverlap: 3,
+                });
+              }}
+              className={`px-4 py-2 rounded-md transition-colors duration-200 text-sm font-medium ${
+                !isCanvasMode ? 'bg-orange-600 text-white hover:bg-orange-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
             >
               Book Wrapper
             </button>
             <button
-              onClick={() => setSettings({
-                bookPageSize: 'a4',
-                outputPaperSize: 'custom',
-                customOutputWidth: 560,
-                customOutputHeight: 300,
-                unit: 'mm',
-                marginTop: 10,
-                marginBottom: 0,
-                marginLeft: 280,
-                marginRight: 0,
-                centerHorizontally: false,
-                centerVertically: false
-              })}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors duration-200 text-sm font-medium"
+              onClick={() => {
+                setIsCanvasMode(false);
+                setSettings({
+                  bookPageSize: 'a4',
+                  outputPaperSize: 'custom',
+                  customOutputWidth: 560,
+                  customOutputHeight: 300,
+                  unit: 'mm',
+                  marginTop: 10,
+                  marginBottom: 0,
+                  marginLeft: 280,
+                  marginRight: 0,
+                  centerHorizontally: false,
+                  centerVertically: false
+                });
+              }}
+              className={`px-4 py-2 rounded-md transition-colors duration-200 text-sm font-medium ${
+                !isCanvasMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
             >
               Blue Binding Wrapper
             </button>
             <button
-              onClick={() => setSettings({
-                bookPageSize: 'a4',
-                outputPaperSize: 'custom',
-                customOutputWidth: 482.6,
-                customOutputHeight: 330.2,
-                unit: 'mm',
-                marginTop: 16,
-                marginBottom: 16,
-                marginLeft: 257,
-                marginRight: 15,
-                centerHorizontally: false,
-                centerVertically: false,
-              })}
-              className="bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700 transition-colors duration-200 text-sm font-medium"
+              onClick={() => {
+                setIsCanvasMode(true);
+                setSettings({
+                  bookPageSize: 'a4',
+                  outputPaperSize: 'custom',
+                  customOutputWidth: 482.6,
+                  customOutputHeight: 330.2,
+                  unit: 'mm',
+                  marginTop: 16,
+                  marginBottom: 16,
+                  marginLeft: 257,
+                  marginRight: 15,
+                  centerHorizontally: false,
+                  centerVertically: false,
+                });
+              }}
+              className={`px-4 py-2 rounded-md transition-colors duration-200 text-sm font-medium ${
+                isCanvasMode ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
             >
               Canvas Wrapper
             </button>
@@ -538,21 +578,36 @@ const BookWrapper: React.FC = () => {
         </div>
       </div>
 
+      {/* Template Upload - Only for Canvas Wrapper */}
+      {isCanvasMode && (
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <FileUpload
+            id="templateImageInput"
+            accept="image/jpeg,image/jpg,image/png,.jpg,.jpeg,.png"
+            multiple={false}
+            onFileChange={handleTemplateChange}
+            label="Upload Template Image (13×19)"
+            description="Upload the background template image for canvas wrapper"
+            fileCount={templateFile ? templateFile.name : 'No template selected'}
+          />
+        </div>
+      )}
+
       {/* File Upload */}
       <FileUpload
         id="bookWrapperImageInput"
         accept="image/jpeg,image/jpg,image/png,.jpg,.jpeg,.png,application/pdf,.pdf"
         multiple
         onFileChange={handleFileChange}
-        label="Upload Images or PDFs"
-        description="Drag & Drop or Click to Select — JPG, PNG, PDF supported. For multi-page PDFs, only the first page is used."
+        label={isCanvasMode ? "Upload PDFs" : "Upload Images or PDFs"}
+        description={isCanvasMode ? "Upload PDF files. First page of each PDF will be placed on the template." : "Drag & Drop or Click to Select — JPG, PNG, PDF supported. For multi-page PDFs, only the first page is used."}
         fileCount={getFileDisplay()}
       />
 
       {/* Process Button */}
       <button
         onClick={processWrapper}
-        disabled={isProcessing || imageFiles.length === 0}
+        disabled={isProcessing || imageFiles.length === 0 || (isCanvasMode && !templateFile)}
         className="w-full bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:from-orange-600 hover:to-red-700 transition-all duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-orange-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
       >
         {isProcessing ? (
@@ -563,7 +618,7 @@ const BookWrapper: React.FC = () => {
         ) : (
           <span className="flex items-center justify-center gap-2">
             <Zap className="w-5 h-5" />
-            Apply Wrapper
+            {isCanvasMode ? 'Generate Canvas Wrapper' : 'Apply Wrapper'}
           </span>
         )}
       </button>
