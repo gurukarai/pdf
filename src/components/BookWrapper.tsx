@@ -1,16 +1,13 @@
 import React, { useState, useCallback } from 'react';
-import { FileText, Settings, Zap, Image as ImageIcon } from 'lucide-react';
+import { FileText, Settings, Zap } from 'lucide-react';
 import FileUpload from './FileUpload';
 import StatusMessage from './StatusMessage';
 import DownloadButton from './DownloadButton';
 import { BookWrapperSettings, StatusMessage as StatusMessageType } from '../types';
-import { processBookWrapper, processBookWrapperImages, processCanvasWrapper } from '../utils/pdfUtils';
+import { processBookWrapper, processBookWrapperImages } from '../utils/pdfUtils';
 import { BOOK_PAGE_SIZES, OUTPUT_PAPER_SIZES } from '../constants';
 
-type WrapperMode = 'book-wrapper' | 'canvas-wrapper';
-
 const BookWrapper: React.FC = () => {
-  const [mode, setMode] = useState<WrapperMode>('book-wrapper');
   const [settings, setSettings] = useState<BookWrapperSettings>({
     bookPageSize: 'a5',
     outputPaperSize: 'a3',
@@ -24,9 +21,6 @@ const BookWrapper: React.FC = () => {
   });
 
   const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
-  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
-  const [previewPdfIndex, setPreviewPdfIndex] = useState(0);
   const [status, setStatus] = useState<StatusMessageType | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string>('');
@@ -40,22 +34,6 @@ const BookWrapper: React.FC = () => {
     }
   }, []);
 
-  const handleBackgroundChange = useCallback((files: FileList | null) => {
-    if (files && files.length > 0) {
-      setBackgroundFile(files[0]);
-      setStatus(null);
-      setDownloadUrl('');
-    }
-  }, []);
-
-  const handlePdfFilesChange = useCallback((files: FileList | null) => {
-    if (files) {
-      setPdfFiles(Array.from(files));
-      setStatus(null);
-      setDownloadUrl('');
-      setPreviewPdfIndex(0);
-    }
-  }, []);
 
   const handleSettingChange = useCallback((key: keyof BookWrapperSettings, value: any) => {
     setSettings(prev => ({ ...prev, [key]: value }));
@@ -122,38 +100,6 @@ const BookWrapper: React.FC = () => {
     }
   }, [imageFiles, settings]);
 
-  const processCanvas = useCallback(async () => {
-    if (!backgroundFile || pdfFiles.length === 0) {
-      setStatus({ message: 'Please select background image and a PDF file.', type: 'error' });
-      return;
-    }
-
-    setIsProcessing(true);
-    setStatus(null);
-    setDownloadUrl('');
-
-    try {
-      const result = await processCanvasWrapper(backgroundFile, pdfFiles[0], settings, (message) => {
-        setStatus({ message, type: 'info' });
-      });
-
-      const url = URL.createObjectURL(result.blob);
-      setDownloadUrl(url);
-      setDownloadFilename(result.filename);
-      setStatus({
-        message: `✅ Success! Canvas wrapper generated successfully.`,
-        type: 'success'
-      });
-    } catch (error) {
-      console.error('Canvas wrapper processing error:', error);
-      setStatus({
-        message: `An error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        type: 'error'
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [backgroundFile, pdfFiles, settings]);
 
   const getFileDisplay = () => {
     if (imageFiles.length === 0) return 'No files selected';
@@ -209,99 +155,7 @@ const BookWrapper: React.FC = () => {
         <h2 className="text-2xl font-bold text-gray-800">Book Wrapper</h2>
       </div>
 
-      {/* Mode Selection Tabs */}
-      <div className="bg-white rounded-lg border border-gray-200 p-2 flex gap-2">
-        <button
-          onClick={() => setMode('book-wrapper')}
-          className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-md font-medium transition-all duration-200 ${
-            mode === 'book-wrapper'
-              ? 'bg-orange-600 text-white shadow-md'
-              : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          <FileText className="w-5 h-5" />
-          Book Wrapper
-        </button>
-        <button
-          onClick={() => setMode('canvas-wrapper')}
-          className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-md font-medium transition-all duration-200 ${
-            mode === 'canvas-wrapper'
-              ? 'bg-blue-600 text-white shadow-md'
-              : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          <ImageIcon className="w-5 h-5" />
-          Canvas Wrapper
-        </button>
-      </div>
-
-      {/* Canvas Wrapper Content */}
-      {mode === 'canvas-wrapper' && (
-        <>
-          <div className="bg-gray-50 p-6 rounded-lg">
-            <div className="flex items-center gap-2 mb-4">
-              <ImageIcon className="w-5 h-5 text-gray-600" />
-              <h3 className="text-lg font-semibold text-gray-800">Canvas Wrapper - Upload Files</h3>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">
-              Upload a background image and a PDF file. The PDF pages will be placed on the background using the same margin and centering settings as Book Wrapper mode.
-            </p>
-
-            <div className="space-y-4">
-            <FileUpload
-              id="canvasBackgroundInput"
-              accept="image/jpeg,image/jpg,image/png,.jpg,.jpeg,.png"
-              multiple={false}
-              onFileChange={handleBackgroundChange}
-              label="Background Image (13 × 19 in)"
-              description="Upload the background image for the canvas"
-              fileCount={backgroundFile ? backgroundFile.name : 'No file selected'}
-            />
-
-            <FileUpload
-              id="canvasPdfInput"
-              accept="application/pdf,.pdf"
-              multiple={true}
-              onFileChange={handlePdfFilesChange}
-              label="PDF Cover Files"
-              description="Upload one or more PDF files. First page of each PDF will be used."
-              fileCount={pdfFiles.length === 0 ? 'No files selected' : pdfFiles.length === 1 ? pdfFiles[0].name : `${pdfFiles.length} files selected`}
-            />
-          </div>
-
-          {/* Process Button for Canvas */}
-          <button
-            onClick={processCanvas}
-            disabled={isProcessing || !backgroundFile || pdfFiles.length === 0}
-            className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-          >
-            {isProcessing ? (
-              <span className="flex items-center justify-center gap-2">
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Processing...
-              </span>
-            ) : (
-              <span className="flex items-center justify-center gap-2">
-                <Zap className="w-5 h-5" />
-                Generate Canvas Wrapper PDF
-              </span>
-            )}
-          </button>
-
-          {/* Status and Download for Canvas */}
-          <StatusMessage status={status} isProcessing={isProcessing} />
-          {downloadUrl && (
-            <div className="text-center">
-              <DownloadButton href={downloadUrl} filename={downloadFilename}>
-                Download Canvas Wrapper PDF
-              </DownloadButton>
-            </div>
-          )}
-          </div>
-        </>
-      )}
-
-      {/* Shared Settings Section - Used by both Book Wrapper and Canvas Wrapper */}
+      {/* Shared Settings Section */}
       <div className="bg-gray-50 p-6 rounded-lg">
         <div className="flex items-center gap-2 mb-4">
           <Settings className="w-5 h-5 text-gray-600" />
@@ -310,8 +164,30 @@ const BookWrapper: React.FC = () => {
         
         {/* Preset Templates */}
         <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-          <h4 className="text-md font-semibold text-blue-800 mb-3">Preset Templates</h4>
+          <h4 className="text-md font-semibold text-blue-800 mb-3">Wrapper Settings</h4>
           <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => setSettings({
+                bookPageSize: 'a4',
+                outputPaperSize: 'custom',
+                customOutputWidth: 482.6,
+                customOutputHeight: 330.2,
+                unit: 'mm',
+                marginTop: 16,
+                marginBottom: 16,
+                marginLeft: 257,
+                marginRight: 15,
+                centerHorizontally: false,
+                centerVertically: false,
+                enableSpine: true,
+                spineWidth: 10,
+                spineTickLength: 5,
+                spineOverlap: 3,
+              })}
+              className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 transition-colors duration-200 text-sm font-medium"
+            >
+              Book Wrapper
+            </button>
             <button
               onClick={() => setSettings({
                 bookPageSize: 'a4',
@@ -343,38 +219,16 @@ const BookWrapper: React.FC = () => {
                 marginRight: 15,
                 centerHorizontally: false,
                 centerVertically: false,
-                enableSpine: true,
-                spineWidth: 10,
-                spineTickLength: 5,
-                spineOverlap: 3,
               })}
-              className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition-colors duration-200 text-sm font-medium"
+              className="bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700 transition-colors duration-200 text-sm font-medium"
             >
-              A4 Book Wrapper (13×19)
-            </button>
-            <button
-              onClick={() => setSettings({
-                bookPageSize: 'a4',
-                outputPaperSize: 'custom',
-                customOutputWidth: 482.6,
-                customOutputHeight: 330.2,
-                unit: 'mm',
-                marginTop: 16,
-                marginBottom: 16,
-                marginLeft: 257,
-                marginRight: 15,
-                centerHorizontally: false,
-                centerVertically: false,
-              })}
-              className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors duration-200 text-sm font-medium"
-            >
-              Canvas Wrapper (13×19)
+              Canvas Wrapper
             </button>
           </div>
           <div className="mt-3 space-y-1 text-xs text-blue-700">
+            <p><strong>Book Wrapper:</strong> A4 (210×297mm) right-aligned on 13×19" landscape with spine — 15mm right, 16mm top/bottom, 257mm left margin</p>
             <p><strong>Blue Binding Wrapper:</strong> A4 on 560×300mm — left binding margin (280mm left, 10mm top)</p>
-            <p><strong>A4 Book Wrapper (13×19):</strong> A4 (210×297mm) right-aligned on 13×19" landscape — 15mm right, 16mm top/bottom, 257mm left margin</p>
-            <p><strong>Canvas Wrapper (13×19):</strong> A4 (210×297mm) on 13×19" landscape with transparency — perfect for placing transparent PDFs on canvas templates</p>
+            <p><strong>Canvas Wrapper:</strong> Places PDF first page as transparent on 13×19" template</p>
           </div>
         </div>
 
@@ -684,10 +538,8 @@ const BookWrapper: React.FC = () => {
         </div>
       </div>
 
-      {/* File Upload - Book Wrapper Mode */}
-      {mode === 'book-wrapper' && (
-        <>
-          <FileUpload
+      {/* File Upload */}
+      <FileUpload
         id="bookWrapperImageInput"
         accept="image/jpeg,image/jpg,image/png,.jpg,.jpeg,.png,application/pdf,.pdf"
         multiple
@@ -711,7 +563,7 @@ const BookWrapper: React.FC = () => {
         ) : (
           <span className="flex items-center justify-center gap-2">
             <Zap className="w-5 h-5" />
-            Apply Book Wrapper
+            Apply Wrapper
           </span>
         )}
       </button>
@@ -729,8 +581,6 @@ const BookWrapper: React.FC = () => {
             Download Wrapped Images PDF
           </DownloadButton>
         </div>
-      )}
-        </>
       )}
       {/* End of Book Wrapper Mode */}
     </div>
