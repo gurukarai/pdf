@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { FileText, Settings, Zap } from 'lucide-react';
+import { FileText, Settings, Zap, Image as ImageIcon } from 'lucide-react';
 import FileUpload from './FileUpload';
 import StatusMessage from './StatusMessage';
 import DownloadButton from './DownloadButton';
@@ -7,7 +7,10 @@ import { BookWrapperSettings, StatusMessage as StatusMessageType } from '../type
 import { processBookWrapper, processBookWrapperImages } from '../utils/pdfUtils';
 import { BOOK_PAGE_SIZES, OUTPUT_PAPER_SIZES } from '../constants';
 
+type WrapperMode = 'book-wrapper' | 'canvas-wrapper';
+
 const BookWrapper: React.FC = () => {
+  const [mode, setMode] = useState<WrapperMode>('book-wrapper');
   const [settings, setSettings] = useState<BookWrapperSettings>({
     bookPageSize: 'a5',
     outputPaperSize: 'a3',
@@ -18,6 +21,13 @@ const BookWrapper: React.FC = () => {
     marginRight: 20,
     centerHorizontally: true,
     centerVertically: true
+  });
+
+  const [canvasSettings, setCanvasSettings] = useState({
+    orientation: 'landscape' as 'landscape' | 'portrait',
+    paperSize: '13x19-super-b',
+    offsetX: 0,
+    offsetY: 0,
   });
 
   const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -153,8 +163,259 @@ const BookWrapper: React.FC = () => {
         <h2 className="text-2xl font-bold text-gray-800">Book Wrapper</h2>
       </div>
 
-      {/* Settings */}
-      <div className="bg-gray-50 p-6 rounded-lg">
+      {/* Mode Selection Tabs */}
+      <div className="bg-white rounded-lg border border-gray-200 p-2 flex gap-2">
+        <button
+          onClick={() => setMode('book-wrapper')}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-md font-medium transition-all duration-200 ${
+            mode === 'book-wrapper'
+              ? 'bg-orange-600 text-white shadow-md'
+              : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <FileText className="w-5 h-5" />
+          Book Wrapper
+        </button>
+        <button
+          onClick={() => setMode('canvas-wrapper')}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-md font-medium transition-all duration-200 ${
+            mode === 'canvas-wrapper'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <ImageIcon className="w-5 h-5" />
+          Canvas Wrapper
+        </button>
+      </div>
+
+      {/* Canvas Wrapper Content */}
+      {mode === 'canvas-wrapper' && (
+        <>
+          <div className="bg-gray-50 p-6 rounded-lg">
+            <div className="flex items-center gap-2 mb-4">
+              <Settings className="w-5 h-5 text-gray-600" />
+              <h3 className="text-lg font-semibold text-gray-800">Canvas Wrapper Settings</h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Left Column - Paper Settings */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Output Paper Size</label>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => setCanvasSettings(prev => ({ ...prev, orientation: 'landscape', paperSize: '13x19-super-b' }))}
+                      className={`w-full text-left px-4 py-2 rounded-md border-2 transition-colors ${
+                        canvasSettings.orientation === 'landscape' && canvasSettings.paperSize === '13x19-super-b'
+                          ? 'border-blue-600 bg-blue-50'
+                          : 'border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="font-medium">13 × 19 in (Super B)</div>
+                      <div className="text-sm text-gray-500">482.6 × 330.2 mm</div>
+                    </button>
+                    <button
+                      onClick={() => setCanvasSettings(prev => ({ ...prev, orientation: 'portrait', paperSize: '12x18-arch-c' }))}
+                      className={`w-full text-left px-4 py-2 rounded-md border-2 transition-colors ${
+                        canvasSettings.orientation === 'portrait' && canvasSettings.paperSize === '12x18-arch-c'
+                          ? 'border-blue-600 bg-blue-50'
+                          : 'border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="font-medium">12 × 18 in (Arch C)</div>
+                      <div className="text-sm text-gray-500">457.2 × 304.8 mm</div>
+                    </button>
+                    <button
+                      onClick={() => setCanvasSettings(prev => ({ ...prev, orientation: 'portrait', paperSize: 'tabloid-11x17' }))}
+                      className={`w-full text-left px-4 py-2 rounded-md border-2 transition-colors ${
+                        canvasSettings.orientation === 'portrait' && canvasSettings.paperSize === 'tabloid-11x17'
+                          ? 'border-blue-600 bg-blue-50'
+                          : 'border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="font-medium">Tabloid / 11 × 17 in</div>
+                      <div className="text-sm text-gray-500">431.8 × 279.4 mm</div>
+                    </button>
+                    <button
+                      onClick={() => setCanvasSettings(prev => ({ ...prev, orientation: 'portrait', paperSize: 'a3' }))}
+                      className={`w-full text-left px-4 py-2 rounded-md border-2 transition-colors ${
+                        canvasSettings.orientation === 'portrait' && canvasSettings.paperSize === 'a3'
+                          ? 'border-blue-600 bg-blue-50'
+                          : 'border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="font-medium">A3 (297 × 420 mm)</div>
+                      <div className="text-sm text-gray-500">420 × 297 mm</div>
+                    </button>
+                    <button
+                      onClick={() => setCanvasSettings(prev => ({ ...prev, orientation: 'portrait', paperSize: 'a4' }))}
+                      className={`w-full text-left px-4 py-2 rounded-md border-2 transition-colors ${
+                        canvasSettings.orientation === 'portrait' && canvasSettings.paperSize === 'a4'
+                          ? 'border-blue-600 bg-blue-50'
+                          : 'border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="font-medium">A4 (210 × 297 mm)</div>
+                      <div className="text-sm text-gray-500">297 × 210 mm</div>
+                    </button>
+                    <button
+                      onClick={() => setCanvasSettings(prev => ({ ...prev, orientation: 'portrait', paperSize: 'letter' }))}
+                      className={`w-full text-left px-4 py-2 rounded-md border-2 transition-colors ${
+                        canvasSettings.orientation === 'portrait' && canvasSettings.paperSize === 'letter'
+                          ? 'border-blue-600 bg-blue-50'
+                          : 'border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="font-medium">Letter (8.5 × 11 in)</div>
+                      <div className="text-sm text-gray-500">279.4 × 215.9 mm</div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column - Position Controls */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">PDF Page Position</label>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Horizontal offset (mm)</label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="range"
+                          min="-50"
+                          max="50"
+                          step="0.5"
+                          value={canvasSettings.offsetX}
+                          onChange={(e) => setCanvasSettings(prev => ({ ...prev, offsetX: parseFloat(e.target.value) }))}
+                          className="flex-1"
+                        />
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={canvasSettings.offsetX}
+                          onChange={(e) => setCanvasSettings(prev => ({ ...prev, offsetX: parseFloat(e.target.value) }))}
+                          className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Negative = move left | Positive = move right</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Vertical offset (mm)</label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="range"
+                          min="-50"
+                          max="50"
+                          step="0.5"
+                          value={canvasSettings.offsetY}
+                          onChange={(e) => setCanvasSettings(prev => ({ ...prev, offsetY: parseFloat(e.target.value) }))}
+                          className="flex-1"
+                        />
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={canvasSettings.offsetY}
+                          onChange={(e) => setCanvasSettings(prev => ({ ...prev, offsetY: parseFloat(e.target.value) }))}
+                          className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Negative = move up | Positive = move down</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Info Box */}
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                  <h4 className="text-sm font-semibold text-blue-800 mb-2">Output specs</h4>
+                  <div className="text-xs text-blue-700 space-y-1">
+                    <p>Paper: {canvasSettings.paperSize === '13x19-super-b' ? '13 × 19 in (Super B)' :
+                              canvasSettings.paperSize === '12x18-arch-c' ? '12 × 18 in (Arch C)' :
+                              canvasSettings.paperSize === 'tabloid-11x17' ? 'Tabloid / 11 × 17 in' :
+                              canvasSettings.paperSize === 'a3' ? 'A3 (297 × 420 mm)' :
+                              canvasSettings.paperSize === 'a4' ? 'A4 (210 × 297 mm)' :
+                              'Letter (8.5 × 11 in)'}</p>
+                    <p>Canvas: {canvasSettings.orientation === 'landscape' ? '482.6 × 330.2 mm' :
+                               canvasSettings.paperSize === '12x18-arch-c' ? '457.2 × 304.8 mm' :
+                               canvasSettings.paperSize === 'tabloid-11x17' ? '431.8 × 279.4 mm' :
+                               canvasSettings.paperSize === 'a3' ? '420 × 297 mm' :
+                               canvasSettings.paperSize === 'a4' ? '297 × 210 mm' :
+                               '279.4 × 215.9 mm'}</p>
+                    <p>Resolution: 300 DPI</p>
+                    <p>Size: {canvasSettings.orientation === 'landscape' ? '5,700 × 3,900 px' :
+                             canvasSettings.paperSize === '12x18-arch-c' ? '5,394 × 3,600 px' :
+                             canvasSettings.paperSize === 'tabloid-11x17' ? '5,100 × 3,300 px' :
+                             canvasSettings.paperSize === 'a3' ? '4,961 × 3,508 px' :
+                             canvasSettings.paperSize === 'a4' ? '3,508 × 2,480 px' :
+                             '3,300 × 2,550 px'}</p>
+                    <p>PDF cover placed on right half</p>
+                    <p>All processing runs locally in your browser</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* File Uploads for Canvas Wrapper */}
+          <div className="space-y-4">
+            <FileUpload
+              id="canvasBackgroundInput"
+              accept="image/jpeg,image/jpg,image/png,.jpg,.jpeg,.png"
+              multiple={false}
+              onFileChange={handleFileChange}
+              label="Background Image (13 × 19 in)"
+              description="Upload the background image for the canvas"
+              fileCount={imageFiles.length > 0 ? imageFiles[0].name : 'No file selected'}
+            />
+
+            <FileUpload
+              id="canvasPdfInput"
+              accept="application/pdf,.pdf"
+              multiple={true}
+              onFileChange={handleFileChange}
+              label="PDF Cover Files"
+              description="Upload one or more PDF files. First page of each PDF will be used."
+              fileCount={getFileDisplay()}
+            />
+          </div>
+
+          {/* Process Button for Canvas */}
+          <button
+            onClick={processWrapper}
+            disabled={isProcessing || imageFiles.length === 0}
+            className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:from-blue-600 hover:to-indigo-700 transition-all duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+          >
+            {isProcessing ? (
+              <span className="flex items-center justify-center gap-2">
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Processing...
+              </span>
+            ) : (
+              <span className="flex items-center justify-center gap-2">
+                <Zap className="w-5 h-5" />
+                Generate PDF Bundle
+              </span>
+            )}
+          </button>
+
+          {/* Status and Download for Canvas */}
+          <StatusMessage status={status} isProcessing={isProcessing} />
+          {downloadUrl && (
+            <div className="text-center">
+              <DownloadButton href={downloadUrl} filename={downloadFilename}>
+                Download PDF Bundle
+              </DownloadButton>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Book Wrapper Content */}
+      {mode === 'book-wrapper' && (
+        <>
+          <div className="bg-gray-50 p-6 rounded-lg">
         <div className="flex items-center gap-2 mb-4">
           <Settings className="w-5 h-5 text-gray-600" />
           <h3 className="text-lg font-semibold text-gray-800">Wrapper Settings</h3>
@@ -560,6 +821,8 @@ const BookWrapper: React.FC = () => {
             Download Wrapped Images PDF
           </DownloadButton>
         </div>
+      )}
+        </>
       )}
     </div>
   );
