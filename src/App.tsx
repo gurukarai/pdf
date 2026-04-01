@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { FileText, Image as ImageIcon, Download, CheckCircle, Loader2, RotateCcw } from 'lucide-react';
+import { FileText, Image as ImageIcon, Download, CheckCircle, Loader2, RotateCcw, Eye, EyeOff, Lock, Zap, Calculator, Printer, CreditCard, Sparkles, FileImage } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import FileUploader from './components/FileUploader';
 import ProcessingStatus from './components/ProcessingStatus';
@@ -12,6 +12,9 @@ import OCRProcessor from './components/OCRProcessor';
 import IntelligenceCollage from './components/IntelligenceCollage';
 import PageRangeCalculator from './components/PageRangeCalculator';
 import BookCoverCompositor from './components/BookCoverCompositor';
+import CardSheetGenerator from './components/CardSheetGenerator';
+import PdfManipulation from './components/PdfManipulation';
+import ImageTools from './components/ImageTools';
 
 type MainMode = 'card-sheet' | 'pdf-manipulation' | 'book-print' | 'image-tools' | 'dual-side-cards' | 'book-wrapper' | 'ocr' | 'intelligence-collage' | 'page-range-calculator' | 'book-cover-maker' | 'print-job-distributor' | 'book-cover-compositor';
 
