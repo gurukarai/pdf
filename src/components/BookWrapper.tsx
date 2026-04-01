@@ -352,10 +352,29 @@ const BookWrapper: React.FC = () => {
             >
               A4 Book Wrapper (13×19)
             </button>
+            <button
+              onClick={() => setSettings({
+                bookPageSize: 'a4',
+                outputPaperSize: 'custom',
+                customOutputWidth: 482.6,
+                customOutputHeight: 330.2,
+                unit: 'mm',
+                marginTop: 16,
+                marginBottom: 16,
+                marginLeft: 257,
+                marginRight: 15,
+                centerHorizontally: false,
+                centerVertically: false,
+              })}
+              className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors duration-200 text-sm font-medium"
+            >
+              Canvas Wrapper (13×19)
+            </button>
           </div>
           <div className="mt-3 space-y-1 text-xs text-blue-700">
             <p><strong>Blue Binding Wrapper:</strong> A4 on 560×300mm — left binding margin (280mm left, 10mm top)</p>
             <p><strong>A4 Book Wrapper (13×19):</strong> A4 (210×297mm) right-aligned on 13×19" landscape — 15mm right, 16mm top/bottom, 257mm left margin</p>
+            <p><strong>Canvas Wrapper (13×19):</strong> A4 (210×297mm) on 13×19" landscape with transparency — perfect for placing transparent PDFs on canvas templates</p>
           </div>
         </div>
 

@@ -1531,6 +1531,9 @@ export async function processCanvasWrapper(
   const sourcePdf = await PDFDocument.load(fileBuffer);
   const totalPages = sourcePdf.getPageCount();
 
+  // Also load with pdfjs for rendering with transparency
+  const pdfjsDoc = await getDocument({ data: fileBuffer }).promise;
+
   onProgress(`Processing ${totalPages} pages...`);
 
   // Convert all dimensions to points (1/72 inch)
@@ -1575,7 +1578,6 @@ export async function processCanvasWrapper(
   const availableHeight = outputHeight - marginTop - marginBottom;
 
   const finalPdf = await PDFDocument.create();
-  const [embeddedPdf] = await finalPdf.embedPdf(sourcePdf);
 
   // Convert background image to PNG bytes for embedding
   const bgCanvas = document.createElement('canvas');
@@ -1593,8 +1595,12 @@ export async function processCanvasWrapper(
   for (let i = 0; i < totalPages; i++) {
     onProgress(`Processing page ${i + 1} of ${totalPages}...`);
 
-    const embeddedPage = embeddedPdf.get(i);
-    const { width: originalWidth, height: originalHeight } = embeddedPage;
+    // Get page from pdfjs for rendering with transparency
+    const pdfjsPage = await pdfjsDoc.getPage(i + 1);
+    const viewport = pdfjsPage.getViewport({ scale: 2.0 }); // Higher scale for quality
+
+    const originalWidth = viewport.width / 2.0 * 0.75; // Convert back to points
+    const originalHeight = viewport.height / 2.0 * 0.75;
 
     // Calculate scale to fit within available space while maintaining aspect ratio
     const scaleX = availableWidth / originalWidth;
@@ -1616,6 +1622,26 @@ export async function processCanvasWrapper(
       y = marginBottom + (availableHeight - scaledHeight) / 2;
     }
 
+    // Render PDF page to canvas with transparency
+    const pdfCanvas = document.createElement('canvas');
+    pdfCanvas.width = viewport.width;
+    pdfCanvas.height = viewport.height;
+    const pdfCtx = pdfCanvas.getContext('2d')!;
+
+    // Render with transparent background
+    await pdfjsPage.render({
+      canvasContext: pdfCtx,
+      viewport: viewport,
+      background: 'rgba(0,0,0,0)' // Transparent background
+    }).promise;
+
+    // Convert rendered PDF page to PNG with transparency
+    const pdfPageBlob = await new Promise<Blob>((resolve) => {
+      pdfCanvas.toBlob((blob) => resolve(blob!), 'image/png');
+    });
+    const pdfPageBytes = await pdfPageBlob.arrayBuffer();
+    const embeddedPdfPage = await finalPdf.embedPng(pdfPageBytes);
+
     // Create new page with output dimensions
     const newPage = finalPdf.addPage([outputWidth, outputHeight]);
 
@@ -1627,8 +1653,8 @@ export async function processCanvasWrapper(
       height: outputHeight
     });
 
-    // Draw the embedded PDF page on top
-    newPage.drawPage(embeddedPage, {
+    // Draw the transparent PDF page on top
+    newPage.drawImage(embeddedPdfPage, {
       x,
       y,
       width: scaledWidth,
