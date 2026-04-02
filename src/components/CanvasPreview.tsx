@@ -47,7 +47,7 @@ export default function CanvasPreview({
       const drawW = Math.round(PDF_W_MM * scale);
       const drawH = Math.round(PDF_H_MM * scale);
       const pdfX = Math.round((canvasWidthMM / 2) * scale) + Math.round(offsetX * scale);
-      const pdfY = Math.round(offsetY * scale);
+      const pdfY = Math.round((previewH - drawH) / 2) + Math.round(offsetY * scale);
       ctx.drawImage(pdfPageImage, pdfX, pdfY, drawW, drawH);
     }
 

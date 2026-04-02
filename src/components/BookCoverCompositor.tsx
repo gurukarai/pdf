@@ -137,7 +137,7 @@ async function renderComposite(
     const drawW = Math.round(PDF_W_MM * MM_TO_INCH * DPI);
     const drawH = Math.round(PDF_H_MM * MM_TO_INCH * DPI);
     const pdfX = pdfHalfWidthPx + offsetXpx;
-    const pdfY = offsetYpx;
+    const pdfY = Math.round((canvasHeightPx - drawH) / 2) + offsetYpx;
     ctx.drawImage(pdfPageImage, pdfX, pdfY, drawW, drawH);
   }
 
