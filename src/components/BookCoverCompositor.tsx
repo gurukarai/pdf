@@ -130,17 +130,12 @@ async function renderComposite(
   }
 
   if (pdfPageImage) {
+    const PDF_W_MM = 210;
+    const PDF_H_MM = 297;
     const offsetXpx = Math.round(offsetX * MM_TO_INCH * DPI);
     const offsetYpx = Math.round(offsetY * MM_TO_INCH * DPI);
-    const imgNatW = pdfPageImage.naturalWidth || pdfPageImage.width;
-    const imgNatH = pdfPageImage.naturalHeight || pdfPageImage.height;
-    const imgAspect = imgNatW / imgNatH;
-    let drawW = pdfHalfWidthPx;
-    let drawH = drawW / imgAspect;
-    if (drawH > canvasHeightPx) {
-      drawH = canvasHeightPx;
-      drawW = drawH * imgAspect;
-    }
+    const drawW = Math.round(PDF_W_MM * MM_TO_INCH * DPI);
+    const drawH = Math.round(PDF_H_MM * MM_TO_INCH * DPI);
     const pdfX = pdfHalfWidthPx + offsetXpx;
     const pdfY = offsetYpx;
     ctx.drawImage(pdfPageImage, pdfX, pdfY, drawW, drawH);

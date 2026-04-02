@@ -42,16 +42,10 @@ export default function CanvasPreview({
     }
 
     if (pdfPageImage) {
-      const pdfHalfW = Math.round((canvasWidthMM / 2) * scale);
-      const imgNatW = pdfPageImage.naturalWidth || pdfPageImage.width;
-      const imgNatH = pdfPageImage.naturalHeight || pdfPageImage.height;
-      const imgAspect = imgNatW / imgNatH;
-      let drawW = pdfHalfW;
-      let drawH = drawW / imgAspect;
-      if (drawH > previewH) {
-        drawH = previewH;
-        drawW = drawH * imgAspect;
-      }
+      const PDF_W_MM = 210;
+      const PDF_H_MM = 297;
+      const drawW = Math.round(PDF_W_MM * scale);
+      const drawH = Math.round(PDF_H_MM * scale);
       const pdfX = Math.round((canvasWidthMM / 2) * scale) + Math.round(offsetX * scale);
       const pdfY = Math.round(offsetY * scale);
       ctx.drawImage(pdfPageImage, pdfX, pdfY, drawW, drawH);
