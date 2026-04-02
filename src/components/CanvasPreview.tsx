@@ -43,10 +43,18 @@ export default function CanvasPreview({
 
     if (pdfPageImage) {
       const pdfHalfW = Math.round((canvasWidthMM / 2) * scale);
-      const pdfH = previewH;
+      const imgNatW = pdfPageImage.naturalWidth || pdfPageImage.width;
+      const imgNatH = pdfPageImage.naturalHeight || pdfPageImage.height;
+      const imgAspect = imgNatW / imgNatH;
+      let drawW = pdfHalfW;
+      let drawH = drawW / imgAspect;
+      if (drawH > previewH) {
+        drawH = previewH;
+        drawW = drawH * imgAspect;
+      }
       const pdfX = Math.round((canvasWidthMM / 2) * scale) + Math.round(offsetX * scale);
       const pdfY = Math.round(offsetY * scale);
-      ctx.drawImage(pdfPageImage, pdfX, pdfY, pdfHalfW, pdfH);
+      ctx.drawImage(pdfPageImage, pdfX, pdfY, drawW, drawH);
     }
 
     ctx.strokeStyle = 'rgba(100,116,139,0.4)';
