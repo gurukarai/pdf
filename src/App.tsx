@@ -9,8 +9,9 @@ import PageRangeCalculator from './components/PageRangeCalculator';
 import CardSheetGenerator from './components/CardSheetGenerator';
 import PdfManipulation from './components/PdfManipulation';
 import ImageTools from './components/ImageTools';
+import BulkIDGenerator from './components/BulkIDGenerator';
 
-type MainMode = 'card-sheet' | 'pdf-manipulation' | 'book-print' | 'image-tools' | 'dual-side-cards' | 'book-wrapper' | 'ocr' | 'intelligence-collage' | 'page-range-calculator' | 'book-cover-maker' | 'print-job-distributor';
+type MainMode = 'card-sheet' | 'pdf-manipulation' | 'book-print' | 'image-tools' | 'dual-side-cards' | 'book-wrapper' | 'ocr' | 'intelligence-collage' | 'page-range-calculator' | 'book-cover-maker' | 'print-job-distributor' | 'bulk-id';
 
 const SECRET_KEY = '9578078500';
 
@@ -356,11 +357,30 @@ function App() {
                   <span className="text-sm font-medium text-gray-700">Print Job Distributor</span>
                 </div>
               </label>
+
+              <label className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                mainMode === 'bulk-id'
+                  ? 'border-amber-500 bg-amber-50 shadow-md'
+                  : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="main-mode"
+                  value="bulk-id"
+                  checked={mainMode === 'bulk-id'}
+                  onChange={(e) => setMainMode(e.target.value as MainMode)}
+                  className="sr-only"
+                />
+                <div className="flex items-center gap-3">
+                  <CreditCard className="w-6 h-6 text-amber-600" />
+                  <span className="text-sm font-medium text-gray-700">Bulk ID</span>
+                </div>
+              </label>
             </div>
           </div>
 
           {/* Content Area */}
-          <div className={mainMode === 'book-cover-maker' || mainMode === 'print-job-distributor' ? 'p-0' : 'p-8'}>
+          <div className={mainMode === 'book-cover-maker' || mainMode === 'print-job-distributor' || mainMode === 'bulk-id' ? 'p-0' : 'p-8'}>
             {mainMode === 'card-sheet' && <CardSheetGenerator />}
             {mainMode === 'pdf-manipulation' && <PdfManipulation />}
             {mainMode === 'book-print' && <BookPrint />}
@@ -392,6 +412,7 @@ function App() {
                 />
               </div>
             )}
+            {mainMode === 'bulk-id' && <BulkIDGenerator />}
           </div>
         </div>
 
