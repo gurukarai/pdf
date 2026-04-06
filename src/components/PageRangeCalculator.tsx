@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Calculator, Copy, FileText, Printer, Upload, Download, Scissors, Wand2, Loader2 } from 'lucide-react';
+import { Calculator, Copy, FileText, Printer, Upload, Download, Scissors, Wand2, Loader2, StickyNote, X, Save } from 'lucide-react';
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
+import SplitterNotes, { addSplitterNote } from './SplitterNotes';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.mjs',
@@ -15,6 +16,13 @@ interface AutoSplitResult {
   monoPageNumbers: number[];
   colorPdfUrl: string | null;
   monoPdfUrl: string | null;
+}
+
+interface SaveNoteModal {
+  visible: boolean;
+  source: 'manual' | 'auto';
+  colorPages: string;
+  monoPages: string;
 }
 
 async function isColorPage(
@@ -49,6 +57,7 @@ function PageRangeCalculator() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [splitting, setSplitting] = useState(false);
   const [splitStatus, setSplitStatus] = useState<string>('');
+  const [showNotes, setShowNotes] = useState(false);
 
   const [autoFile, setAutoFile] = useState<File | null>(null);
   const [autoDetecting, setAutoDetecting] = useState(false);
@@ -56,6 +65,10 @@ function PageRangeCalculator() {
   const [autoResult, setAutoResult] = useState<AutoSplitResult | null>(null);
   const autoFileInputRef = useRef<HTMLInputElement>(null);
   const manualFileInputRef = useRef<HTMLInputElement>(null);
+
+  const [saveModal, setSaveModal] = useState<SaveNoteModal>({ visible: false, source: 'manual', colorPages: '', monoPages: '' });
+  const [saveName, setSaveName] = useState('');
+  const [saveNote, setSaveNote] = useState('');
 
   const parsePageNumbers = (input: string): number[] => {
     if (!input.trim()) return [];
@@ -76,9 +89,22 @@ function PageRangeCalculator() {
     return Array.from(pages).sort((a, b) => a - b);
   };
 
+  const numbersToRangeString = (nums: number[]) => {
+    if (nums.length === 0) return 'None';
+    const sorted = [...nums].sort((a, b) => a - b);
+    const ranges: string[] = [];
+    let start = sorted[0], end = sorted[0];
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i] === end + 1) { end = sorted[i]; }
+      else { ranges.push(start === end ? `${start}` : `${start}-${end}`); start = sorted[i]; end = sorted[i]; }
+    }
+    ranges.push(start === end ? `${start}` : `${start}-${end}`);
+    return ranges.join(', ');
+  };
+
   const calculateRanges = useMemo(() => {
     const total = parseInt(totalPages) || 0;
-    if (total <= 0) return { colorPages: 0, monoPages: 0, ranges: [], rangeString: '' };
+    if (total <= 0) return { colorPages: 0, monoPages: 0, ranges: [], rangeString: '', monoPageNumbers: [] as number[] };
     const colorPageNumbers = parsePageNumbers(colorPages);
     const colorSet = new Set(colorPageNumbers);
     const monoPageNumbers: number[] = [];
@@ -100,7 +126,7 @@ function PageRangeCalculator() {
       }
       ranges.push(rangeStart === rangeEnd ? `${rangeStart}` : `${rangeStart}-${rangeEnd}`);
     }
-    return { colorPages: colorPageNumbers.length, monoPages: monoPageNumbers.length, ranges, rangeString: ranges.join(', ') };
+    return { colorPages: colorPageNumbers.length, monoPages: monoPageNumbers.length, ranges, rangeString: ranges.join(', '), monoPageNumbers };
   }, [totalPages, colorPages]);
 
   const handleCopy = async () => {
@@ -162,6 +188,14 @@ function PageRangeCalculator() {
         monoLink.click();
       }, 100);
       setSplitStatus('PDF split successfully! Downloads started.');
+      setSaveName(pdfFile.name.replace('.pdf', ''));
+      setSaveNote('');
+      setSaveModal({
+        visible: true,
+        source: 'manual',
+        colorPages: colorPages,
+        monoPages: calculateRanges.rangeString,
+      });
     } catch (err) {
       setSplitStatus('Failed to split PDF. Please try again.');
     } finally {
@@ -226,8 +260,18 @@ function PageRangeCalculator() {
         ? URL.createObjectURL(new Blob([await monoPdf.save()], { type: 'application/pdf' }))
         : null;
 
-      setAutoResult({ colorPageNumbers, monoPageNumbers, colorPdfUrl, monoPdfUrl });
+      const result = { colorPageNumbers, monoPageNumbers, colorPdfUrl, monoPdfUrl };
+      setAutoResult(result);
       setAutoProgress('Detection complete!');
+
+      setSaveName(autoFile.name.replace('.pdf', ''));
+      setSaveNote('');
+      setSaveModal({
+        visible: true,
+        source: 'auto',
+        colorPages: numbersToRangeString(colorPageNumbers),
+        monoPages: numbersToRangeString(monoPageNumbers),
+      });
     } catch (err) {
       setAutoProgress('Failed to process PDF. Please try again.');
     } finally {
@@ -242,32 +286,49 @@ function PageRangeCalculator() {
     a.click();
   };
 
-  const numbersToRangeString = (nums: number[]) => {
-    if (nums.length === 0) return 'None';
-    const sorted = [...nums].sort((a, b) => a - b);
-    const ranges: string[] = [];
-    let start = sorted[0], end = sorted[0];
-    for (let i = 1; i < sorted.length; i++) {
-      if (sorted[i] === end + 1) { end = sorted[i]; }
-      else { ranges.push(start === end ? `${start}` : `${start}-${end}`); start = sorted[i]; end = sorted[i]; }
-    }
-    ranges.push(start === end ? `${start}` : `${start}-${end}`);
-    return ranges.join(', ');
+  const handleSaveNote = () => {
+    if (!saveName.trim()) return;
+    addSplitterNote({
+      name: saveName.trim(),
+      note: saveNote.trim(),
+      colorPages: saveModal.colorPages,
+      monoPages: saveModal.monoPages,
+      source: saveModal.source,
+    });
+    setSaveModal(prev => ({ ...prev, visible: false }));
+    setShowNotes(true);
   };
 
   return (
     <div className="max-w-5xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl shadow-lg">
-          <Calculator className="w-8 h-8 text-white" />
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl shadow-lg">
+            <Calculator className="w-8 h-8 text-white" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800">Color - Mono Pages Splitter</h2>
+            <p className="text-gray-600 mt-1">Separate your color and mono printing jobs efficiently.</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800">Color - Mono Pages Splitter</h2>
-          <p className="text-gray-600 mt-1">
-            Separate your color and mono printing jobs efficiently.
-          </p>
-        </div>
+        <button
+          onClick={() => setShowNotes(v => !v)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-medium text-sm transition-all duration-200 ${
+            showNotes
+              ? 'bg-amber-50 border-amber-300 text-amber-700'
+              : 'bg-white border-gray-300 text-gray-600 hover:border-amber-300 hover:text-amber-600'
+          }`}
+        >
+          <StickyNote className="w-4 h-4" />
+          Notes
+        </button>
       </div>
+
+      {showNotes && (
+        <div className="mb-6">
+          <SplitterNotes onClose={() => setShowNotes(false)} />
+        </div>
+      )}
 
       <div className="flex gap-2 mb-6">
         <button
@@ -596,6 +657,75 @@ function PageRangeCalculator() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {saveModal.visible && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <StickyNote className="w-5 h-5 text-amber-500" />
+                <h3 className="text-lg font-semibold text-gray-800">Save to Notes</h3>
+              </div>
+              <button
+                onClick={() => setSaveModal(prev => ({ ...prev, visible: false }))}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-3 mb-4 text-xs font-mono space-y-1 text-gray-600">
+              <div><span className="font-semibold text-blue-600">Color:</span> {saveModal.colorPages || 'None'}</div>
+              <div><span className="font-semibold text-gray-700">Mono:</span> {saveModal.monoPages || 'None'}</div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={saveName}
+                  onChange={(e) => setSaveName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-colors"
+                  placeholder="e.g. Client Report March"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Note <span className="text-gray-400 font-normal">(optional)</span></label>
+                <textarea
+                  value={saveNote}
+                  onChange={(e) => setSaveNote(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-colors resize-none"
+                  placeholder="Add a reminder or description..."
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setSaveModal(prev => ({ ...prev, visible: false }))}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Skip
+              </button>
+              <button
+                onClick={handleSaveNote}
+                disabled={!saveName.trim()}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  saveName.trim()
+                    ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                <Save className="w-4 h-4" />
+                Save Note
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
