@@ -39,6 +39,7 @@ function App() {
   const [secretKeyInput, setSecretKeyInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const handleSecretKeySubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,7 +132,6 @@ function App() {
     );
   }
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const isFullScreen = ['book-cover-maker', 'print-job-distributor', 'bulk-id'].includes(mainMode);
 
   return (
