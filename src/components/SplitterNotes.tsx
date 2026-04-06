@@ -7,6 +7,8 @@ export interface SplitterNote {
   note: string;
   colorPages: string;
   monoPages: string;
+  colorCount: number;
+  monoCount: number;
   createdAt: string;
   source: 'manual' | 'auto';
 }
@@ -74,7 +76,7 @@ const SplitterNotes: React.FC<SplitterNotesProps> = ({ onClose }) => {
             <div key={note.id} className="p-4 hover:bg-gray-50 transition-colors">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1.5">
                     <span className="font-semibold text-gray-800 text-sm truncate">{note.name}</span>
                     <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${
                       note.source === 'auto'
@@ -84,15 +86,25 @@ const SplitterNotes: React.FC<SplitterNotesProps> = ({ onClose }) => {
                       {note.source === 'auto' ? 'Auto' : 'Manual'}
                     </span>
                   </div>
+                  <div className="flex gap-4 mb-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"></div>
+                      <span className="text-xs font-semibold text-blue-700">{note.colorCount ?? 0} color</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-gray-400 flex-shrink-0"></div>
+                      <span className="text-xs font-semibold text-gray-600">{note.monoCount ?? 0} mono</span>
+                    </div>
+                  </div>
                   {note.note && (
-                    <p className="text-sm text-gray-600 mb-2 leading-relaxed">{note.note}</p>
+                    <p className="text-sm text-gray-600 mb-1.5 leading-relaxed">{note.note}</p>
                   )}
-                  <div className="flex flex-wrap gap-3 text-xs text-gray-500">
-                    <span>
-                      <span className="font-medium text-blue-600">Color:</span> {note.colorPages || 'None'}
+                  <div className="flex flex-wrap gap-3 text-xs text-gray-400">
+                    <span className="font-mono truncate max-w-xs">
+                      <span className="text-blue-500 font-medium not-italic">C:</span> {note.colorPages || 'None'}
                     </span>
-                    <span>
-                      <span className="font-medium text-gray-600">Mono:</span> {note.monoPages || 'None'}
+                    <span className="font-mono truncate max-w-xs">
+                      <span className="text-gray-500 font-medium not-italic">M:</span> {note.monoPages || 'None'}
                     </span>
                   </div>
                   <p className="text-xs text-gray-400 mt-1">{note.createdAt}</p>

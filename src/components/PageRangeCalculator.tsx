@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Calculator, Copy, FileText, Printer, Upload, Download, Scissors, Wand2, Loader2, StickyNote, X, Save } from 'lucide-react';
+import { Calculator, Copy, FileText, Printer, Upload, Download, Scissors, Wand2, Loader2, StickyNote, Save } from 'lucide-react';
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
 import SplitterNotes, { addSplitterNote } from './SplitterNotes';
@@ -18,11 +18,13 @@ interface AutoSplitResult {
   monoPdfUrl: string | null;
 }
 
-interface SaveNoteModal {
+interface SaveNoteForm {
   visible: boolean;
   source: 'manual' | 'auto';
   colorPages: string;
   monoPages: string;
+  colorCount: number;
+  monoCount: number;
 }
 
 async function isColorPage(
@@ -66,7 +68,7 @@ function PageRangeCalculator() {
   const autoFileInputRef = useRef<HTMLInputElement>(null);
   const manualFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [saveModal, setSaveModal] = useState<SaveNoteModal>({ visible: false, source: 'manual', colorPages: '', monoPages: '' });
+  const [saveForm, setSaveForm] = useState<SaveNoteForm>({ visible: false, source: 'manual', colorPages: '', monoPages: '', colorCount: 0, monoCount: 0 });
   const [saveName, setSaveName] = useState('');
   const [saveNote, setSaveNote] = useState('');
 
@@ -190,11 +192,13 @@ function PageRangeCalculator() {
       setSplitStatus('PDF split successfully! Downloads started.');
       setSaveName(pdfFile.name.replace('.pdf', ''));
       setSaveNote('');
-      setSaveModal({
+      setSaveForm({
         visible: true,
         source: 'manual',
         colorPages: colorPages,
         monoPages: calculateRanges.rangeString,
+        colorCount: colorPageNumbers.length,
+        monoCount: totalPageCount - colorPageNumbers.length,
       });
     } catch (err) {
       setSplitStatus('Failed to split PDF. Please try again.');
@@ -266,11 +270,13 @@ function PageRangeCalculator() {
 
       setSaveName(autoFile.name.replace('.pdf', ''));
       setSaveNote('');
-      setSaveModal({
+      setSaveForm({
         visible: true,
         source: 'auto',
         colorPages: numbersToRangeString(colorPageNumbers),
         monoPages: numbersToRangeString(monoPageNumbers),
+        colorCount: colorPageNumbers.length,
+        monoCount: monoPageNumbers.length,
       });
     } catch (err) {
       setAutoProgress('Failed to process PDF. Please try again.');
@@ -291,11 +297,15 @@ function PageRangeCalculator() {
     addSplitterNote({
       name: saveName.trim(),
       note: saveNote.trim(),
-      colorPages: saveModal.colorPages,
-      monoPages: saveModal.monoPages,
-      source: saveModal.source,
+      colorPages: saveForm.colorPages,
+      monoPages: saveForm.monoPages,
+      colorCount: saveForm.colorCount,
+      monoCount: saveForm.monoCount,
+      source: saveForm.source,
     });
-    setSaveModal(prev => ({ ...prev, visible: false }));
+    setSaveForm(prev => ({ ...prev, visible: false }));
+    setSaveName('');
+    setSaveNote('');
     setShowNotes(true);
   };
 
@@ -531,6 +541,51 @@ function PageRangeCalculator() {
                 </div>
               </div>
             )}
+
+            {saveForm.visible && saveForm.source === 'manual' && (
+              <div className="mt-4 border border-amber-200 bg-amber-50 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <StickyNote className="w-4 h-4 text-amber-500" />
+                  <span className="text-sm font-semibold text-amber-800">Save to Notes</span>
+                </div>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={saveName}
+                    onChange={(e) => setSaveName(e.target.value)}
+                    className="w-full px-3 py-2 border border-amber-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 bg-white transition-colors"
+                    placeholder="Name (e.g. Client Report March)"
+                  />
+                  <textarea
+                    value={saveNote}
+                    onChange={(e) => setSaveNote(e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-amber-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 bg-white transition-colors resize-none"
+                    placeholder="Optional note or reminder..."
+                  />
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={handleSaveNote}
+                      disabled={!saveName.trim()}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        saveName.trim()
+                          ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      Save Note
+                    </button>
+                    <button
+                      onClick={() => setSaveForm(prev => ({ ...prev, visible: false }))}
+                      className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -655,77 +710,53 @@ function PageRangeCalculator() {
                   )}
                 </div>
               </div>
+
+              {saveForm.visible && saveForm.source === 'auto' && (
+                <div className="mt-5 border border-amber-200 bg-amber-50 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <StickyNote className="w-4 h-4 text-amber-500" />
+                    <span className="text-sm font-semibold text-amber-800">Save to Notes</span>
+                  </div>
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={saveName}
+                      onChange={(e) => setSaveName(e.target.value)}
+                      className="w-full px-3 py-2 border border-amber-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 bg-white transition-colors"
+                      placeholder="Name (e.g. Client Report March)"
+                    />
+                    <textarea
+                      value={saveNote}
+                      onChange={(e) => setSaveNote(e.target.value)}
+                      rows={2}
+                      className="w-full px-3 py-2 border border-amber-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 bg-white transition-colors resize-none"
+                      placeholder="Optional note or reminder..."
+                    />
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={handleSaveNote}
+                        disabled={!saveName.trim()}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          saveName.trim()
+                            ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        Save Note
+                      </button>
+                      <button
+                        onClick={() => setSaveForm(prev => ({ ...prev, visible: false }))}
+                        className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
-        </div>
-      )}
-
-      {saveModal.visible && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <StickyNote className="w-5 h-5 text-amber-500" />
-                <h3 className="text-lg font-semibold text-gray-800">Save to Notes</h3>
-              </div>
-              <button
-                onClick={() => setSaveModal(prev => ({ ...prev, visible: false }))}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-3 mb-4 text-xs font-mono space-y-1 text-gray-600">
-              <div><span className="font-semibold text-blue-600">Color:</span> {saveModal.colorPages || 'None'}</div>
-              <div><span className="font-semibold text-gray-700">Mono:</span> {saveModal.monoPages || 'None'}</div>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  value={saveName}
-                  onChange={(e) => setSaveName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-colors"
-                  placeholder="e.g. Client Report March"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Note <span className="text-gray-400 font-normal">(optional)</span></label>
-                <textarea
-                  value={saveNote}
-                  onChange={(e) => setSaveNote(e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-colors resize-none"
-                  placeholder="Add a reminder or description..."
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-5">
-              <button
-                onClick={() => setSaveModal(prev => ({ ...prev, visible: false }))}
-                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Skip
-              </button>
-              <button
-                onClick={handleSaveNote}
-                disabled={!saveName.trim()}
-                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  saveName.trim()
-                    ? 'bg-amber-500 hover:bg-amber-600 text-white'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
-              >
-                <Save className="w-4 h-4" />
-                Save Note
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>
