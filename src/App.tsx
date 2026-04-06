@@ -131,23 +131,27 @@ function App() {
     );
   }
 
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const isFullScreen = ['book-cover-maker', 'print-job-distributor', 'bulk-id'].includes(mainMode);
 
   return (
     <div className="flex h-screen bg-gray-50" style={{ fontFamily: 'Inter, sans-serif' }}>
       {/* Left Sidebar */}
-      <aside className="w-56 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
+      <aside
+        className="flex-shrink-0 bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out overflow-hidden"
+        style={{ width: sidebarOpen ? '224px' : '52px' }}
+      >
         {/* Logo */}
-        <div className="px-4 py-4 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-gradient-to-br from-blue-500 to-slate-600 rounded-lg shadow">
-              <Zap className="w-4 h-4 text-white" />
-            </div>
-            <div>
+        <div className="px-3 py-4 border-b border-gray-200 flex items-center gap-2 min-h-[57px]">
+          <div className="flex-shrink-0 p-1.5 bg-gradient-to-br from-blue-500 to-slate-600 rounded-lg shadow">
+            <Zap className="w-4 h-4 text-white" />
+          </div>
+          {sidebarOpen && (
+            <div className="overflow-hidden whitespace-nowrap">
               <div className="text-sm font-bold text-gray-800 leading-tight">PrintMaster Pro</div>
               <div className="text-xs text-gray-500 leading-tight">All-in-One Tools</div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Navigation */}
@@ -156,28 +160,30 @@ function App() {
             <button
               key={item.mode}
               onClick={() => setMainMode(item.mode)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-sm transition-all duration-150 mb-0.5 ${
+              title={!sidebarOpen ? item.label : undefined}
+              className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-left text-sm transition-all duration-150 mb-0.5 ${
                 mainMode === item.mode
                   ? 'bg-blue-50 text-blue-700 font-semibold border-l-2 border-blue-600'
                   : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
-              }`}
+              } ${!sidebarOpen ? 'justify-center' : ''}`}
             >
-              <span className={mainMode === item.mode ? 'text-blue-600' : item.color}>
+              <span className={`flex-shrink-0 ${mainMode === item.mode ? 'text-blue-600' : item.color}`}>
                 {item.icon}
               </span>
-              <span className="leading-tight">{item.label}</span>
+              {sidebarOpen && <span className="leading-tight truncate">{item.label}</span>}
             </button>
           ))}
         </nav>
 
         {/* Logout */}
-        <div className="p-3 border-t border-gray-200">
+        <div className="p-2 border-t border-gray-200">
           <button
             onClick={() => setIsAuthenticated(false)}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors duration-150"
+            title={!sidebarOpen ? 'Logout' : undefined}
+            className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors duration-150 ${!sidebarOpen ? 'justify-center' : ''}`}
           >
-            <Lock className="w-4 h-4" />
-            <span>Logout</span>
+            <Lock className="w-4 h-4 flex-shrink-0" />
+            {sidebarOpen && <span>Logout</span>}
           </button>
         </div>
       </aside>
@@ -185,8 +191,20 @@ function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
-          <div>
+        <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(o => !o)}
+              className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors duration-150"
+              title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                {sidebarOpen
+                  ? <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>
+                  : <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>
+                }
+              </svg>
+            </button>
             <h2 className="text-base font-semibold text-gray-800">
               {NAV_ITEMS.find(n => n.mode === mainMode)?.label ?? 'Dashboard'}
             </h2>
